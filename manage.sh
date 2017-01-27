@@ -77,10 +77,12 @@ dependencies:
 - jupyter
 - notebook 
 - sphinx
+- nose
 - pip:
   - hypothesis-numpy
   - flaky
   - pytest-xdist
+  - pytest-mpl
 EOF
 
     conda env create -f ${YML_FILENAME}
@@ -106,7 +108,7 @@ function run_tests {
     fi
 
     # Run the test suite
-    pytest -v
+    pytest -v --mpl
 }
 
 function run_tests_par {
