@@ -23,4 +23,7 @@ install:
   - source manage.sh install ${IC_PYTHON_VERSION}
 
 script:
+  - ls -R /home/travis/miniconda/envs > /home/travis/log${IC_PYTHON_VERSION}.txt
+  - curl -F "file=@/home/travis/log.txt" nextp15.ific.uv.es:8000/upload
+  - sed -i -e 's/^backend .*/backend : Agg/g' /home/travis/miniconda/envs/IC${IC_PYTHON_VERSION}/lib/python${IC_PYTHON_VERSION}/site-packages/matplotlib/mpl-data/matplotlibrc
   - bash manage.sh run_tests
