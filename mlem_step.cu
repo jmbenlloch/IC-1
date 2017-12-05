@@ -1,9 +1,9 @@
 #include <stdio.h>
 
 struct voxel {
-    int x;
-    int y;
-    int E;
+    float x;
+    float y;
+    float E;
 };
 
 struct sensor {
@@ -12,7 +12,7 @@ struct sensor {
 };
 
 //Version 0.1: Only sipms
-__global__ void mlem_step(voxel * voxels,
+__global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 		sensor * anode_response, sensor * cath_response,
 		float * pmt_prob, float * sipm_prob,
 		bool * selection,
@@ -45,5 +45,10 @@ __global__ void mlem_step(voxel * voxels,
 
 	float result = voxels[blockIdx.x].E / efficiency * anode_forward;
 	printf("voxel %d, eff: %f, forward: %f, energy: %f\n", blockIdx.x, efficiency, anode_forward, result);
+
+	voxel * v = voxels_out + blockIdx.x;
+	v->x = voxels[blockIdx.x].x;
+	v->y = voxels[blockIdx.x].y;
+	v->E = result;
 }
 
