@@ -61,7 +61,7 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 		denom += voxels[j].E * pmt_prob[j];
 	}
 	float cathode_forward = num / denom;
-	printf("[%d], num: %f * %f =  %f, den: %f, cath_forward: %f\n", blockIdx.x, cath_response[0], pmt_prob[blockIdx.x], num, denom, cathode_forward);
+//	printf("[%d], num: %f * %f =  %f, den: %f, cath_forward: %f\n", blockIdx.x, cath_response[0], pmt_prob[blockIdx.x], num, denom, cathode_forward);
 	
 
 	float result = voxels[blockIdx.x].E / efficiency * (anode_forward + cathode_forward);
