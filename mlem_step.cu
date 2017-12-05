@@ -13,7 +13,7 @@ struct sensor {
 
 //Version 0.1: Use sipms and pmts
 __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
-		sensor * anode_response, sensor * cath_response,
+		sensor * anode_response, float * cath_response,
 		float * pmt_prob, float * sipm_prob,
 		bool * selection,
 		int nvoxels, int nsipms, int npmts){
@@ -55,13 +55,13 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 	}
 
 	// Forward projection cathode
-	float num = cath_response[0].charge * pmt_prob[blockIdx.x];
+	float num = cath_response[0] * pmt_prob[blockIdx.x];
 	float denom = 0;
 	for(int j=0; j<nvoxels; j++){
 		denom += voxels[j].E * pmt_prob[j];
 	}
 	float cathode_forward = num / denom;
-	printf("[%d], num: %f, den: %f, cath_forward: %f\n", blockIdx.x, num, denom, cathode_forward);
+	printf("[%d], num: %f * %f =  %f, den: %f, cath_forward: %f\n", blockIdx.x, cath_response[0], pmt_prob[blockIdx.x], num, denom, cathode_forward);
 	
 
 	float result = voxels[blockIdx.x].E / efficiency * (anode_forward + cathode_forward);
