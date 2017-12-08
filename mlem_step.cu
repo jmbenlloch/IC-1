@@ -26,6 +26,7 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 	//Efficiency for sipms seems to be ok compared with python version (check dtype of sipm_prob...)
 	for(int i=0; i<nsipms; i++){
 	//	printf("sipm_prob[%d]: %f\n", blockIdx.x * nsipms + i, sipm_prob[blockIdx.x * nsipms + i]);
+		//printf("[%d]: offset: %d\n", blockIdx.x, blockIdx.x * nsipms + i);
 		if(selection[blockIdx.x * nsipms + i]){
 			efficiency += sipm_prob[blockIdx.x * nsipms + i];
 			//printf("eff: %f, new val: %f\n", efficiency, sipm_prob[blockIdx.x * nsipms + i]);

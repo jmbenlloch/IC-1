@@ -185,6 +185,7 @@ from pycuda.tools import make_default_context
 cuda.init()
 ctx = make_default_context()
 
+
 def reset_algorithm_cuda(DataSiPM, slice_, sens_q, point_dist, sipm_thr, sizeX, sizeY, rMax, sipm_dist, pmt_xy_map, sipm_xy_map):
     print("reset running")
 
@@ -197,20 +198,21 @@ def reset_algorithm_cuda(DataSiPM, slice_, sens_q, point_dist, sipm_thr, sizeX, 
     cath_response_h = np.array([e*ZCorr(z).value], dtype='f4')
 
     # Copy data to device
-#    voxels_d         = cuda.to_device(voxels_h)
-#    anode_response_d = cuda.to_device(anode_response_h)
-#    cath_response_d  = cuda.to_device(cath_response_h)
-#    pmt_prob_d      = cuda.to_device(pmt_prob_h)
-#    sipm_prob_d      = cuda.to_device(sipm_prob_h)
-#    selSens_d        = cuda.to_device(selSens_h)
+    voxels_d         = cuda.to_device(voxels_h)
+    anode_response_d = cuda.to_device(anode_response_h)
+    cath_response_d  = cuda.to_device(cath_response_h)
+    pmt_prob_d      = cuda.to_device(pmt_prob_h)
+    sipm_prob_d      = cuda.to_device(sipm_prob_h)
+    selSens_d        = cuda.to_device(selSens_h)
 
     #allocate memory for result
-#    voxels_out_d = cuda.mem_alloc(voxels_h.nbytes)
+    voxels_out_d = cuda.mem_alloc(voxels_h.nbytes)
+    print(voxels_out_d)
 
     #compile cuda code
-#    kernel_code = open('mlem_step.cu').read()
-#    mod = SourceModule(kernel_code)
-#    func = mod.get_function("mlem_step")
+    kernel_code = open('mlem_step.cu').read()
+    mod = SourceModule(kernel_code)
+    func = mod.get_function("mlem_step")
 
     #run algorithm
 #    iterations = 100
@@ -219,22 +221,46 @@ def reset_algorithm_cuda(DataSiPM, slice_, sens_q, point_dist, sipm_thr, sizeX, 
 #            voxels_d, voxels_out_d = voxels_out_d, voxels_d
 #        func(voxels_d, voxels_out_d, anode_response_d, cath_response_d, pmt_prob_d, sipm_prob_d, selSens_d, np.int32(voxels_h.shape[0]), np.int32(anode_response_h.shape[0]), np.int32(1), block=(1, 1, 1), grid=(voxels_h.shape[0], 1))
 
-#    func(voxels_d, voxels_out_d, anode_response_d, cath_response_d, pmt_prob_d, sipm_prob_d, selSens_d, np.int32(voxels_h.shape[0]), np.int32(anode_response_h.shape[0]), np.int32(1), block=(1, 1, 1), grid=(voxels_h.shape[0], 1))
+    print("selSens: ", selSens_h.shape, selSens_h.nbytes)
+    print("grid: ", voxels_h.shape[0])
+    print("args: ", np.int32(voxels_h.shape[0]), np.int32(anode_response_h.shape[0]), np.int32(1))
+    func(voxels_d, voxels_out_d, anode_response_d, cath_response_d, pmt_prob_d, sipm_prob_d, selSens_d, np.int32(voxels_h.shape[0]), np.int32(anode_response_h.shape[0]), np.int32(1), block=(1, 1, 1), grid=(voxels_h.shape[0], 1))
 
     #copy back the result
-    #voxels_out_h = cuda.from_device(voxels_out_d, voxels_h.shape, voxels_h.dtype)
+    print(voxels_out_d)
+    voxels_out_h = cuda.from_device(voxels_out_d, voxels_h.shape, voxels_h.dtype)
     #TODO fix
-    voxels_out_h = voxels_h
+    #voxels_out_h = voxels_h
 
-#    voxels_d.free()
-#    anode_response_d.free()
-#    cath_response_d.free()
-#    pmt_prob_d.free()
-#    sipm_prob_d.free()
-#    selSens_d.free()
-#    voxels_out_d.free()
+    voxels_d.free()
+    anode_response_d.free()
+    cath_response_d.free()
+    pmt_prob_d.free()
+    sipm_prob_d.free()
+    selSens_d.free()
+    voxels_out_d.free()
 
     return voxels_out_h
+
+
+
+def reset_algorithm(DataSiPM, slice_, sens_q, point_dist, sipm_thr, sizeX, sizeY, rMax, sipm_dist, pmt_xy_map, sipm_xy_map):
+    vox = rstf.CreateVoxels(DataSiPM, np.array(slice_[0]), sens_q, point_dist, sipm_thr, sizeX, sizeY, rMax)
+    #Create anode and cathode response 
+    anode_response = rstf.CreateSiPMresponse(DataSiPM, np.array(slice_[0]), sens_q, sipm_dist, sipm_thr, vox)
+
+    cath_response = np.array([e*ZCorr(z).value])
+
+    #Run MLEM
+    imageIter = vox
+    voxDX, voxDY = rstf.computeDiff(DataSiPM, vox, anode_response)
+    selVox, selSens = rstf.createSel(voxDX, voxDY, anode_response, sipm_dist)
+    z_index = int(z//zstep )
+    sipm_prob, pmt_prob = rstf.computeProb(pmt_xy_map, sipm_xy_map[z_index], voxDX, voxDY, vox[0], vox[1])
+    j = 0
+    for j in range(iterations):
+        imageIter = rstf.MLEM_step(voxDX, voxDY, imageIter, selVox, selSens, anode_response, cath_response, pmt_prob, sipm_prob, sipm_dist=sipm_dist, eThres=e_thres, fCathode = fCathode, fAnode = fAnode)  
+    return imageIter
 
 
 
@@ -343,8 +369,12 @@ for fnumber, file in enumerate(['/home/jmbenlloch/reset_data/4495/pmaps/pmaps.gd
                         continue     
                     
                     #break
-                    imageIter = reset_algorithm_cuda(DataSiPM, slice_, sens_q, point_dist, sipm_thr, sizeX, sizeY, rMax, sipm_dist, pmt_xy_map, sipm_xy_map)
-                        
+                    #imageIter = reset_algorithm_cuda(DataSiPM, slice_, sens_q, point_dist, sipm_thr, sizeX, sizeY, rMax, sipm_dist, pmt_xy_map, sipm_xy_map)
+                    imageIter = reset_algorithm(DataSiPM, slice_, sens_q, point_dist, sipm_thr, sizeX, sizeY, rMax, sipm_dist, pmt_xy_map, sipm_xy_map)
+
+
+
+
     #Save Event
                     for iv in range(len(imageIter[0])):
                         if imageIter[2][iv] <= 0.1:
@@ -365,3 +395,4 @@ h5out.close()
 
 
 ctx.detach()
+
