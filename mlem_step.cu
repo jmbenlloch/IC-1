@@ -76,5 +76,11 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 	}else{
 		v->E = result;
 	}
+
+
+//	voxel * v = voxels_out + blockIdx.x;
+//	v->x = voxels[blockIdx.x].x;
+//	v->y = voxels[blockIdx.x].y;
+//	v->E = voxels[blockIdx.x].E;
 }
 
