@@ -48,7 +48,7 @@ def CreateSiPMresponse(DataSiPM, sens_id, sens_q, sipm_dist, sipm_thr, vox):
 def computeDiff(DataSiPM, oldVox, anode_response):
     sensx = DataSiPM.X[anode_response['id']].values
     sensy =  DataSiPM.Y[anode_response['id']].values
-    voxD = np.array([[oldVox[0][j] - sensx, oldVox[1][j] - sensy] for j in range(len(oldVox[0]))], dtype='f4')
+    voxD = np.array([[oldVox['x'][j] - sensx, oldVox['y'][j] - sensy] for j in range(len(oldVox))], dtype='f4')
     return voxD[:,0], voxD[:,1]
 
 
