@@ -110,24 +110,15 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 //	printf("[%d], active: %d, x: %f, y: %f, e: %f\n", blockIdx.x, voxels[blockIdx.x].active, voxels[blockIdx.x].x, voxels[blockIdx.x].y, voxels[blockIdx.x].E);
 
 	float efficiency = 0;
-
-	// Add SiPM part (this can be stored on the first iteration)
-	for(int i=0; i<nsipms; i++){
-		if(sipm_selection[blockIdx.x * nsipms + i]){
-			efficiency += sipm_prob[blockIdx.x * nsipms + i];
-		}
-	}
-	// Add cathode part (just one pmt now)
-	for(int i=0; i<npmts; i++){
-		if(pmt_selection[blockIdx.x * npmts + i]){
-			efficiency += pmt_prob[blockIdx.x * npmts + i];
-		}
-	}
-
-	// Forward projection anode
 	float anode_forward = 0;
+	float cathode_forward = 0;
+
+	// SiPM part
 	for(int i=0; i<nsipms; i++){
 		if(sipm_selection[blockIdx.x * nsipms + i]){
+			// Add efficiency
+			efficiency += sipm_prob[blockIdx.x * nsipms + i];
+			// Add forward projection
 			float num = anode_response[i].charge * sipm_prob[blockIdx.x * nsipms + i];
 			float denom = 0;
 			for(int j=0; j<nvoxels; j++){
@@ -138,11 +129,12 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 			anode_forward += num/denom;
 		}
 	}
-
-	// Forward projection cathode
-	float cathode_forward = 0;
+	// Cathode part
 	for(int i=0; i<npmts; i++){
 		if(pmt_selection[blockIdx.x * npmts + i]){
+			// Add efficiency
+			efficiency += pmt_prob[blockIdx.x * npmts + i];
+			// Add forward projection
 			float num = cath_response[i].charge * pmt_prob[blockIdx.x * npmts + i];
 			float denom = 0;
 			for(int j=0; j<nvoxels; j++){

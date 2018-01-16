@@ -142,56 +142,46 @@ sensors_pmts_d = cuda.mem_alloc(npmts * sensors_dt.itemsize)
 ##################################################
 ##################################################
 corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
+active_dt = np.dtype([('id', 'i1')])
+compute_active_sensors = mod.get_function("compute_active_sensors")
+
+def read_corrections_file(filename, node):
+    corr_h5 = tb.open_file(filename)
+    corr_table = getattr(corr_h5.root.ResetMap, node)
+    corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
+
+    # we need to explicitly build it to get into memory only (x,y,factor)
+    # to check: struct.unpack('f', bytes(pmts_corr.data)[i*4:(i+1)*4])
+    corr = np.array(list(zip(corr_table.col('x'), corr_table.col('y'), corr_table.col('factor'))), dtype=corrections_dt)
+
+    step  =  corr[1][1] - corr[0][1]
+    xmin  =  corr[0][0]
+    ymin  =  corr[0][1]
+
+    nbins = (corr[-1][0] - corr[0][0]) / step + 1
+    nbins = nbins.astype('i4')
+    corr_h5.close()
+
+    return xmin, ymin, nbins, step, corr
 
 #Sipms
 # Read parametrizations
 sipm_corr_file = "/home/jmbenlloch/reset_data/mapas/SiPM_Map_corr_z0.0_keV.h5"
-sipm_corr_h5 = tb.open_file(sipm_corr_file)
-sipm_table = sipm_corr_h5.root.ResetMap.SiPM
-#sipms_corr = sipm_corr_h5.root.ResetMap.SiPM[:][['x', 'y', 'factor']]
-sipms_corr = np.array(list(zip(sipm_table.col('x'), sipm_table.col('y'), sipm_table.col('factor'))), dtype=corrections_dt)
-step_sipms = sipms_corr[1][1] - sipms_corr[0][1]
+xmin_sipms, ymin_sipms, nbins_sipms, step_sipms, sipms_corr = read_corrections_file(sipm_corr_file, 'SiPM')
 
-xmin_sipms = sipms_corr[0][0]
-ymin_sipms = sipms_corr[0][1]
-
-nbins_sipms = (sipms_corr[-1][0] - sipms_corr[0][0]) / step_sipms + 1
-nbins_sipms = nbins_sipms.astype('i4')
-print("sipm bins ", nbins_sipms)
-
-active_dt = np.dtype([('id', 'i1')])
 active_sipms_d = cuda.mem_alloc(num_voxels * nsipms) # TODO: Update after compact
 probs_sipms_d  = cuda.mem_alloc(num_voxels * nsipms * 4) # TODO: Update after compact
-
 sipms_corr_d = cuda.to_device(sipms_corr)
-
-compute_active_sensors = mod.get_function("compute_active_sensors")
 
 compute_active_sensors(active_sipms_d, probs_sipms_d, sensors_sipms_d, voxels_d, x_sipms_d, y_sipms_d, np.int32(nsipms), sipm_dist, step_sipms, nbins_sipms, xmin_sipms, ymin_sipms, sipms_corr_d, block=(1, 1, 1), grid=(num_voxels, 1))
 
-sipm_corr_h5.close()
-
 #Pmts
 # If using more than 1 pmt, take into account that maximum distance is 205
-
 pmt_corr_file  = "/home/jmbenlloch/reset_data/mapas/PMT_Map_corr_keV.h5"
-pmt_corr_h5 = tb.open_file(pmt_corr_file)
-pmt_table = pmt_corr_h5.root.ResetMap.PMT
-#pmts_corr  = np.copy(pmt_corr_h5. root.ResetMap.PMT [:][['x', 'y', 'factor']])
-# we need to explicitly build it to get into memory only (x,y,factor)
-# to check: struct.unpack('f', bytes(pmts_corr.data)[i*4:(i+1)*4])
-pmts_corr = np.array(list(zip(pmt_table.col('x'), pmt_table.col('y'), pmt_table.col('factor'))), dtype=corrections_dt)
-step_pmts  =  pmts_corr[1][1] -  pmts_corr[0][1]
-
-xmin_pmts  =  pmts_corr[0][0]
-ymin_pmts  =  pmts_corr[0][1]
-
-nbins_pmts  = ( pmts_corr[-1][0] -  pmts_corr[0][0]) / step_pmts  + 1
-nbins_pmts = nbins_pmts.astype('i4')
+xmin_pmts, ymin_pmts, nbins_pmts, step_pmts, pmts_corr = read_corrections_file(pmt_corr_file, 'PMT')
 
 active_pmts_d = cuda.mem_alloc(num_voxels * npmts) # TODO: Update after compact
 probs_pmts_d  = cuda.mem_alloc(num_voxels * npmts * 4) # TODO: Update after compact
-
 pmts_corr_d  = cuda.to_device(pmts_corr)
 
 compute_active_sensors(active_pmts_d, probs_pmts_d, sensors_pmts_d, voxels_d, x_pmts_d, y_pmts_d, np.int32(npmts), pmt_dist, step_pmts, nbins_pmts, xmin_pmts, ymin_pmts, pmts_corr_d, block=(1, 1, 1), grid=(num_voxels, 1))
@@ -202,8 +192,6 @@ print (probs_pmts_h)
 print (active_pmts_h)
 #for p in probs_pmts_h:
 #    print(p)
-
-pmt_corr_h5.close()
 
 ##################
 ##################
