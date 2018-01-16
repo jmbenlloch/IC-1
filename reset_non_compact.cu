@@ -140,6 +140,7 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 			for(int j=0; j<nvoxels; j++){
 				denom += voxels[j].E * pmt_prob[j * npmts + i];
 			}
+			cathode_forward += num/denom;
 		}
 	}
 
@@ -154,6 +155,6 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 	}else{
 		v->E = result;
 	}
-	printf("[%d], active: %d, x: %f, y: %f, e: %f\n", blockIdx.x, v->active, v->x, v->y, v->E);
+//	printf("[%d], active: %d, x: %f, y: %f, e: %f\n", blockIdx.x, v->active, v->x, v->y, v->E);
 }
 
