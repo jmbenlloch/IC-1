@@ -216,7 +216,16 @@ voxels_out_d = cuda.mem_alloc(voxels_h.nbytes)
 
 #run
 mlem_step = mod.get_function("mlem_step")
-mlem_step(voxels_d, voxels_out_d, sensors_sipms_d, sensors_pmts_d, probs_pmts_d, probs_sipms_d, active_sipms_d, active_pmts_d, np.int32(num_voxels), np.int32(nsipms), np.int32(npmts), block=(1, 1, 1), grid=(num_voxels, 1))
+#mlem_step(voxels_d, voxels_out_d, sensors_sipms_d, sensors_pmts_d, probs_pmts_d, probs_sipms_d, active_sipms_d, active_pmts_d, np.int32(num_voxels), np.int32(nsipms), np.int32(npmts), block=(1, 1, 1), grid=(num_voxels, 1))
+
+
+iterations = 100
+for i in range(iterations):
+    if i > 0:
+        voxels_d, voxels_out_d = voxels_out_d, voxels_d
+    mlem_step(voxels_d, voxels_out_d, sensors_sipms_d, sensors_pmts_d, probs_pmts_d, probs_sipms_d, active_sipms_d, active_pmts_d, np.int32(num_voxels), np.int32(nsipms), np.int32(npmts), block=(1, 1, 1), grid=(num_voxels, 1))
+
+voxels_out_h = cuda.from_device(voxels_out_d, voxels_h.shape, voxels_h.dtype)
 
 ##############################
 ##############################
