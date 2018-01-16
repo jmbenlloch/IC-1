@@ -39,6 +39,7 @@ for name, attrs in (
         ('FitFunction'    , 'fn values errors chi2 pvalue'),
         ('TriggerParams'  , 'trigger_channels min_number_channels charge height width'),
         ('PeakData'       , 'charge height width'),
+        ('SensorsParams'  , 'xmin ymin step nbins params'),
         ('Measurement'    , 'value uncertainty')):
     _add_namedtuple_in_this_module(name, attrs)
 
