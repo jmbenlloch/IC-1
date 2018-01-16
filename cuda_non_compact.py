@@ -3,9 +3,51 @@ import tables as tb
 import invisible_cities.database.load_db as dbf
 import invisible_cities.reco.corrections as corrf
 
+import pycuda.driver as cuda
+from pycuda.compiler import SourceModule
+#import pycuda.autoinit
+
 run_number = 4495
+DataSiPM = dbf.DataSiPM(run_number)
+DataPMT  = dbf.DataPMT(run_number)
 nsipms = 1792
 npmts = 1
+
+#Define types
+voxels_dt      = np.dtype([('x', 'f4'), ('y', 'f4'), ('E', 'f4'), ('active', 'i4')])
+sensors_dt     = np.dtype([('id', 'i4'), ('charge', 'f4'), ('active', 'i4')])
+corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
+active_dt      = np.dtype([('id', 'i1')])
+
+#create context
+from pycuda.tools import make_default_context
+cuda.init()
+ctx = make_default_context()
+
+#compile cuda code
+kernel_code = open('reset_non_compact.cu').read()
+mod = SourceModule(kernel_code)
+create_voxels          = mod.get_function("create_voxels")
+initiliaze_anode       = mod.get_function("initialize_anode")
+create_anode_response  = mod.get_function("create_anode_response")
+compute_active_sensors = mod.get_function("compute_active_sensors")
+mlem_step              = mod.get_function("mlem_step")
+
+#Get (x,y) positions
+xs_sipms_h = DataSiPM.X.values.astype('f4')
+ys_sipms_h = DataSiPM.Y.values.astype('f4')
+xs_sipms_d = cuda.to_device(xs_sipms_h)
+ys_sipms_d = cuda.to_device(ys_sipms_h)
+
+#Need to choose somehow whether to use one or more PMTs
+#xs_pmts = DataPMT.X.values.astype('f4')
+#ys_pmts = DataPMT.Y.values.astype('f4')
+xs_pmts_h = np.array([0.], dtype='f4')
+ys_pmts_h = np.array([0.], dtype='f4')
+xs_pmts_d = cuda.to_device(xs_pmts_h)
+ys_pmts_d = cuda.to_device(ys_pmts_h)
+
+
 
 t0 = 578125.0
 z = 421.6528125
@@ -23,8 +65,6 @@ s2_energy = np.float32(491.47727966) # measured by pmts
 #Lifetime correction
 ZCorr = corrf.LifetimeCorrection(1093.77, 23.99)
 
-DataSiPM = dbf.DataSiPM(run_number)
-DataPMT  = dbf.DataPMT(run_number)
 
 #################
 #################
@@ -34,7 +74,7 @@ DataPMT  = dbf.DataPMT(run_number)
 dist = 20.
 sipm_dist = np.float32(20.)
 #pmt_dist = np.float32(205)
-pmt_dist = np.float32(10000) # all pmts must be included
+pmt_dist = np.float32(10000) # all pmts are included
 sipm_thr = 5.
 sizeX = 2.
 sizeY = 2.
@@ -52,29 +92,12 @@ xsize = np.float32(sizeX)
 ysize = np.float32(sizeY)
 rmax = np.float32(rMax)
 
-# #### Call CUDA kernel
-import pycuda.driver as cuda
-#import pycuda.autoinit
-import numpy
-from pycuda.compiler import SourceModule
-
-#create context
-from pycuda.tools import make_default_context
-cuda.init()
-ctx = make_default_context()
-
-#compile cuda code
-kernel_code = open('reset_non_compact.cu').read()
-mod = SourceModule(kernel_code)
-create_voxels = mod.get_function("create_voxels")
-
 #TODO: Check rounding here
 threads_x = int((xmax - xmin) / xsize)
 threads_y = int((ymax - ymin) / ysize)
 print(threads_x, threads_y)
 
 #allocate memory for result
-voxels_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('E', 'f4'), ('active', 'i4')])
 num_voxels = threads_x * threads_y
 voxels_d = cuda.mem_alloc(num_voxels * voxels_dt.itemsize)
 
@@ -91,28 +114,14 @@ voxels_h = cuda.from_device(voxels_d, (num_voxels,), voxels_dt)
 ##########################
 ##########################
 #### Step 1: Initialize sipms with zero charge
-#kernel_code = open('reset_non_compact.cu').read()
-#mod = SourceModule(kernel_code)
-initiliaze_anode = mod.get_function("initialize_anode")
-
-xs_sipms = DataSiPM.X.values.astype('f4')
-ys_sipms = DataSiPM.Y.values.astype('f4')
-x_sipms_d = cuda.to_device(xs_sipms)
-y_sipms_d = cuda.to_device(ys_sipms)
-
 #allocate memory for result
 # due to packing the c struct is 12 bytes instead of 9.
 # Mem layout to be updated, maybe pragma pack
-sensors_dt = np.dtype([('id', 'i4'), ('charge', 'f4'), ('active', 'i4')])
 sensors_sipms_d = cuda.mem_alloc(nsipms * sensors_dt.itemsize)
 
-initiliaze_anode(sensors_sipms_d, xmin, xmax, x_sipms_d, ymin, ymax, y_sipms_d, sipm_dist, block=(1, 1, 1), grid=(nsipms, 1))
+initiliaze_anode(sensors_sipms_d, xmin, xmax, xs_sipms_d, ymin, ymax, ys_sipms_d, sipm_dist, block=(1, 1, 1), grid=(nsipms, 1))
 
 #### Step 2: Put the correct charge for active sensors
-#kernel_code = open('reset_non_compact.cu').read()
-#mod = SourceModule(kernel_code)
-create_anode_response = mod.get_function("create_anode_response")
-
 sensor_ids_d = cuda.to_device(sensor_ids)
 charges_d    = cuda.to_device(charges)
 
@@ -124,12 +133,6 @@ create_anode_response(sensors_sipms_d, sensor_ids_d, charges_d, block=(1, 1, 1),
 ## Create cathode response #
 ############################
 ############################
-#xs_pmts = DataPMT.X.values.astype('f4')
-#ys_pmts = DataPMT.Y.values.astype('f4')
-xs_pmts = np.array([0.], dtype='f4')
-ys_pmts = np.array([0.], dtype='f4')
-x_pmts_d = cuda.to_device(xs_pmts)
-y_pmts_d = cuda.to_device(ys_pmts)
 
 s2e = s2_energy * ZCorr(z).value
 sensors_pmts = np.array([(1, s2e, 1)], dtype=sensors_dt)
@@ -141,9 +144,6 @@ sensors_pmts_d = cuda.mem_alloc(npmts * sensors_dt.itemsize)
 ## Select active sensors & compute probabilities #
 ##################################################
 ##################################################
-corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
-active_dt = np.dtype([('id', 'i1')])
-compute_active_sensors = mod.get_function("compute_active_sensors")
 
 def read_corrections_file(filename, node):
     corr_h5 = tb.open_file(filename)
@@ -173,7 +173,7 @@ active_sipms_d = cuda.mem_alloc(num_voxels * nsipms) # TODO: Update after compac
 probs_sipms_d  = cuda.mem_alloc(num_voxels * nsipms * 4) # TODO: Update after compact
 sipms_corr_d = cuda.to_device(sipms_corr)
 
-compute_active_sensors(active_sipms_d, probs_sipms_d, sensors_sipms_d, voxels_d, x_sipms_d, y_sipms_d, np.int32(nsipms), sipm_dist, step_sipms, nbins_sipms, xmin_sipms, ymin_sipms, sipms_corr_d, block=(1, 1, 1), grid=(num_voxels, 1))
+compute_active_sensors(active_sipms_d, probs_sipms_d, sensors_sipms_d, voxels_d, xs_sipms_d, ys_sipms_d, np.int32(nsipms), sipm_dist, step_sipms, nbins_sipms, xmin_sipms, ymin_sipms, sipms_corr_d, block=(1, 1, 1), grid=(num_voxels, 1))
 
 #Pmts
 # If using more than 1 pmt, take into account that maximum distance is 205
@@ -184,7 +184,7 @@ active_pmts_d = cuda.mem_alloc(num_voxels * npmts) # TODO: Update after compact
 probs_pmts_d  = cuda.mem_alloc(num_voxels * npmts * 4) # TODO: Update after compact
 pmts_corr_d  = cuda.to_device(pmts_corr)
 
-compute_active_sensors(active_pmts_d, probs_pmts_d, sensors_pmts_d, voxels_d, x_pmts_d, y_pmts_d, np.int32(npmts), pmt_dist, step_pmts, nbins_pmts, xmin_pmts, ymin_pmts, pmts_corr_d, block=(1, 1, 1), grid=(num_voxels, 1))
+compute_active_sensors(active_pmts_d, probs_pmts_d, sensors_pmts_d, voxels_d, xs_pmts_d, ys_pmts_d, np.int32(npmts), pmt_dist, step_pmts, nbins_pmts, xmin_pmts, ymin_pmts, pmts_corr_d, block=(1, 1, 1), grid=(num_voxels, 1))
 
 probs_pmts_h = cuda.from_device(probs_pmts_d, (num_voxels,), np.dtype('f4'))
 active_pmts_h = cuda.from_device(active_pmts_d, (num_voxels,), active_dt)
@@ -203,7 +203,6 @@ print (active_pmts_h)
 voxels_out_d = cuda.mem_alloc(voxels_h.nbytes)
 
 #run
-mlem_step = mod.get_function("mlem_step")
 #mlem_step(voxels_d, voxels_out_d, sensors_sipms_d, sensors_pmts_d, probs_pmts_d, probs_sipms_d, active_sipms_d, active_pmts_d, np.int32(num_voxels), np.int32(nsipms), np.int32(npmts), block=(1, 1, 1), grid=(num_voxels, 1))
 
 
