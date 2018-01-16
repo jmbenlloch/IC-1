@@ -102,12 +102,12 @@ __global__ void compute_active_sensors(bool * active, float * probabilities,
 }
 
 __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
-		sensor * anode_response, float * cath_response,
+		sensor * anode_response, sensor * cath_response,
 		float * pmt_prob, float * sipm_prob,
 		bool * sipm_selection, bool * pmt_selection,
 		int nvoxels, int nsipms, int npmts){
 
-	printf("[%d], active: %d, x: %f, y: %f, e: %f\n", blockIdx.x, voxels[blockIdx.x].active, voxels[blockIdx.x].x, voxels[blockIdx.x].y, voxels[blockIdx.x].E);
+//	printf("[%d], active: %d, x: %f, y: %f, e: %f\n", blockIdx.x, voxels[blockIdx.x].active, voxels[blockIdx.x].x, voxels[blockIdx.x].y, voxels[blockIdx.x].E);
 
 	float efficiency = 0;
 
@@ -140,15 +140,21 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 	}
 
 	// Forward projection cathode
-	float num = cath_response[0] * pmt_prob[blockIdx.x];
-	float denom = 0;
-	for(int j=0; j<nvoxels; j++){
-		denom += voxels[j].E * pmt_prob[j];
+	float cathode_forward = 0;
+	for(int i=0; i<npmts; i++){
+		if(pmt_selection[blockIdx.x * npmts + i]){
+			float num = cath_response[i].charge * pmt_prob[blockIdx.x * npmts + i];
+			float denom = 0;
+			for(int j=0; j<nvoxels; j++){
+				denom += voxels[j].E * pmt_prob[j * npmts + i];
+			}
+		}
 	}
-	float cathode_forward = num / denom;
+
 	float result = voxels[blockIdx.x].E / efficiency * (anode_forward + cathode_forward);
 
 	voxel * v = voxels_out + blockIdx.x;
+	v->active = voxels[blockIdx.x].active;
 	v->x = voxels[blockIdx.x].x;
 	v->y = voxels[blockIdx.x].y;
 	if (voxels[blockIdx.x].E <= 0.){
@@ -156,5 +162,6 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 	}else{
 		v->E = result;
 	}
+	printf("[%d], active: %d, x: %f, y: %f, e: %f\n", blockIdx.x, v->active, v->x, v->y, v->E);
 }
 
