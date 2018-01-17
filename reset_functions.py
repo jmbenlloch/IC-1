@@ -75,7 +75,7 @@ class RESET:
     def _load_xy_positions(self):
         #Get (x,y) positions
         self.xs_sipms_h = self.data_sipm.X.values.astype('f4')
-        self.ys_sipms_h = self.data_pmt .Y.values.astype('f4')
+        self.ys_sipms_h = self.data_sipm.Y.values.astype('f4')
         self.xs_sipms_d = cuda.to_device(self.xs_sipms_h)
         self.ys_sipms_d = cuda.to_device(self.ys_sipms_h)
 
@@ -181,15 +181,16 @@ def create_anode_response(cudaf, sensor_ids_d, charges_d, nsensors,
          block=(1, 1, 1), grid=(int(total_sipms), 1))
     # Step 2: Put the correct charge for active sensors
     func = cudaf.get_function('create_anode_response')
-    func(sensors_sipms_d, sensor_ids_d, charges_d,
-         block=(1, 1, 1), grid=(int(nsensors), 1))
+#    func(sensors_sipms_d, sensor_ids_d, charges_d,
+#         block=(1, 1, 1), grid=(int(nsensors), 1))
     return sensors_sipms_d
 
 # Energy already corrected, decide where to do that...
 # TODO: Currently only works with one pmt
 def create_cath_response(npmts, energy):
     sensors_pmts_d  = cuda.mem_alloc(int(npmts) * sensors_dt.itemsize)
-    sensors_pmts = np.array([(1, energy, 1)], dtype=sensors_dt)
+    # Important: ID has to be running with array index
+    sensors_pmts = np.array([(0, energy, 1)], dtype=sensors_dt)
     sensors_pmts_d = cuda.to_device(sensors_pmts)
     return sensors_pmts_d
 
@@ -212,21 +213,35 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
                   num_voxels, nsipms, npmts):
 
     tstart = time.time()
-    voxels_out_d    = cuda.mem_alloc(int(num_voxels * voxels_dt.itemsize))
-    func = cudaf.get_function('mlem_step')
+
+    mlem    = cudaf.get_function('mlem_step')
+    forward = cudaf.get_function('forward_projection')
+
+#    forward_pmt_d  = cuda.mem_alloc(int(npmts * 4))
+#    forward_sipm_d = cuda.mem_alloc(int(nsipms * 4))
+    voxels_out_d   = cuda.mem_alloc(int(num_voxels * voxels_dt.itemsize))
+
+
+    iterations = 1
     for i in range(iterations):
         if i > 0:
             voxels_d, voxels_out_d = voxels_out_d, voxels_d
-        func(voxels_d, voxels_out_d, sensors_sipms_d, sensors_pmts_d,
-             probs_pmts_d, probs_sipms_d, active_sipms_d, active_pmts_d,
-             num_voxels, nsipms, npmts,
-             block=(1, 1, 1), grid=(int(num_voxels), 1))
+
+#        forward(forward_sipm_d, voxels_d, probs_sipms_d, active_sipms_d, nsipms, num_voxels, block=(1,1,1), grid=(int(nsipms), 1))
+#        forward(forward_pmt_d,  voxels_d, probs_pmts_d,  active_pmts_d,  npmts,  num_voxels, block=(1,1,1), grid=(int(npmts), 1))
+
+#        mlem(voxels_d, voxels_out_d, sensors_sipms_d, sensors_pmts_d,
+#             forward_pmt_d, forward_sipm_d, probs_pmts_d, probs_sipms_d,
+#             active_sipms_d, active_pmts_d, num_voxels, nsipms, npmts,
+#             block=(1, 1, 1), grid=(int(num_voxels), 1))
     tend = time.time()
     print("MLEM: {}".format(tend-tstart))
 
 
     tstart = time.time()
-    voxels_out_h = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
+#    voxels_out_h = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
+    voxels_out_h = np.empty((num_voxels,), dtype=voxels_dt)
+    cuda.memcpy_dtoh(voxels_out_h, voxels_out_d)
     tend = time.time()
     print("Copy voxels from device: {}".format(tend-tstart))
     return voxels_out_h

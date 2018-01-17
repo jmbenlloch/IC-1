@@ -54,7 +54,7 @@ __global__ void initialize_anode(sensor * sensors,
 	s->charge = 0;
 	s->id = id;
 
-//	printf("[%d]: id=%d, charge=%f, active=%d\n", blockIdx.x, s->id, s->charge, s->active);
+	//printf("[%d]: id=%d, charge=%f, active=%d\n", blockIdx.x, s->id, s->charge, s->active);
 }
 
 // Launch < #sensors in slice >
@@ -94,6 +94,7 @@ __global__ void compute_active_sensors(bool * active, float * probabilities,
 		int yindex = __float2int_rd((ydist - ymin) / step * voxel_sensor + 0.5f);
 		int prob_idx = xindex * nbins + yindex;
 		probabilities[idx] = corrections[prob_idx].factor;
+
 //		printf("[%d]: idx=%d, p=%f, pidx=%d, xindex=%d, %f, nbins=%d, yindex=%d, %f\n", blockIdx.x, idx, probabilities[idx], prob_idx, xindex, xdist, nbins, yindex, ydist);
 
 //		printf("[%d]: id=%d, xdist=%f, ydist=%f, active=%d\n", blockIdx.x, id, xdist, ydist, active[idx], probabilities[idx]);
@@ -101,8 +102,30 @@ __global__ void compute_active_sensors(bool * active, float * probabilities,
 	}
 }
 
+// Arrays dimensions
+// forward_projection[nsensors], voxels[nvoxels]
+// probs[nvoxels][nsensors], selection[nvoxels][nsensors]
+// Launch <<< nsensors >>>
+__global__ void forward_projection(float * forward_projection,
+		voxel * voxels, float * probs, bool * selection, 
+		int nsensors, int nvoxels){
+
+	float denom = 0;
+	for(int i=0; i<nvoxels; i++){
+		if(selection[i * nsensors + blockIdx.x]){
+			denom += voxels[i].E * probs[blockIdx.x * nsensors + i];
+		}
+	}
+	forward_projection[blockIdx.x] = denom;
+	printf("forward[%d] = %f\n", blockIdx.x, forward_projection[blockIdx.x]);
+}
+
+
+// Launch < nvoxels >
+//TODO array dimensions
 __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 		sensor * anode_response, sensor * cath_response,
+		float * forward_pmt, float * forward_sipm, 
 		float * pmt_prob, float * sipm_prob,
 		bool * sipm_selection, bool * pmt_selection,
 		int nvoxels, int nsipms, int npmts){
@@ -129,6 +152,8 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 			anode_forward += num/denom;
 		}
 	}
+
+
 	// Cathode part
 	for(int i=0; i<npmts; i++){
 		if(pmt_selection[blockIdx.x * npmts + i]){
@@ -138,7 +163,9 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 			float num = cath_response[i].charge * pmt_prob[blockIdx.x * npmts + i];
 			float denom = 0;
 			for(int j=0; j<nvoxels; j++){
-				denom += voxels[j].E * pmt_prob[j * npmts + i];
+				if(pmt_selection[j * npmts + i]){
+					denom += voxels[j].E * pmt_prob[j * npmts + i];
+				}
 			}
 			cathode_forward += num/denom;
 		}

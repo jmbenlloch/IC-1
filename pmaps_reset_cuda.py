@@ -15,7 +15,7 @@ nsipms     = 1792
 npmts      = 1
 dist       = 20.
 sipm_dist  = 20.
-pmt_dist   = 10000 # all pmts are included
+pmt_dist   = 200 # max distance included in the param file
 sipm_thr   = 5.
 x_size     = 2.
 y_size     = 2.
@@ -104,6 +104,8 @@ for no in valid_peaks:
     s2, s2si = rebin_s2si(s2, s2si, slice_width)
 
     for tbin, e in enumerate(s2[1]):
+        if tbin != 2:
+            continue
         print ("\n\nTime bin: {}".format(tbin))
 
         tstart = time.time()
