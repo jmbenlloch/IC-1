@@ -5,6 +5,8 @@ import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 from pycuda.tools import make_default_context
 
+import time
+
 from invisible_cities.evm.ic_containers import SensorsParams
 
 # Define types
@@ -93,28 +95,51 @@ class RESET:
         self.sipms_corr_d = cuda.to_device(self.sipm_param.params)
 
     def run(self, sensor_ids, charges, energy, iterations):
+        tstart = time.time()
         sensor_ids_d = cuda.to_device(sensor_ids)
         charges_d    = cuda.to_device(charges)
         nsensors     = np.int32(sensor_ids.shape[0])
+        tend = time.time()
+        print("Copy sensor ids & charge time: {}".format(tend-tstart))
 
+        tstart = time.time()
         xmin, xmax, ymin, ymax, num_voxels, voxels_d, voxels_h = create_voxels(self.cudaf, sensor_ids, charges, self.sipm_thr, self.dist, self.xsize, self.ysize, self.rmax, self.data_sipm)
+        tend = time.time()
+        print("Create voxels time: {}".format(tend-tstart))
+
+        tstart = time.time()
         sensors_sipms_d = create_anode_response(self.cudaf, sensor_ids_d,
                             charges_d, nsensors, self.nsipms,
                             self.sipm_dist, xmin, xmax, self.xs_sipms_d,
                             ymin, ymax, self.ys_sipms_d)
-        sensors_pmts_d = create_cath_response(self.npmts, energy)
+        tend = time.time()
+        print("Create anode response: {}".format(tend-tstart))
 
+        tstart = time.time()
+        sensors_pmts_d = create_cath_response(self.npmts, energy)
+        tend = time.time()
+        print("Create cath response: {}".format(tend-tstart))
+
+        tstart = time.time()
         active_sipms_d, probs_sipms_d = compute_active_sensors(self.cudaf,
                         num_voxels, voxels_d, self.nsipms, self.xs_sipms_d,
                         self.ys_sipms_d, sensors_sipms_d, self.sipm_dist,
                         self.sipm_param, self.sipms_corr_d)
+        tend = time.time()
+        print("Compute active SiPMs: {}".format(tend-tstart))
 
+        tstart = time.time()
         active_pmts_d, probs_pmts_d = compute_active_sensors(self.cudaf,
                         num_voxels, voxels_d, self.npmts, self.xs_pmts_d,
                         self.ys_pmts_d, sensors_pmts_d, self.pmt_dist,
                         self.pmt_param, self.pmts_corr_d)
+        tend = time.time()
+        print("Compute active PMTs: {}".format(tend-tstart))
 
+        tstart = time.time()
         run_mlem_step(self.cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d, probs_sipms_d, probs_pmts_d, active_sipms_d, active_pmts_d, num_voxels, self.nsipms, self.npmts)
+        tend = time.time()
+        print("Run MLEM step: {}".format(tend-tstart))
 
 def create_voxels(cudaf, sensor_ids, charges, sipm_thr, dist,
                   xsize, ysize, rmax, data_sipm):
@@ -185,6 +210,8 @@ def compute_active_sensors(cudaf, num_voxels, voxels_d, nsensors, xs_d, ys_d,
 def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
                   probs_sipms_d, probs_pmts_d, active_sipms_d, active_pmts_d,
                   num_voxels, nsipms, npmts):
+
+    tstart = time.time()
     voxels_out_d    = cuda.mem_alloc(int(num_voxels * voxels_dt.itemsize))
     func = cudaf.get_function('mlem_step')
     for i in range(iterations):
@@ -194,6 +221,12 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
              probs_pmts_d, probs_sipms_d, active_sipms_d, active_pmts_d,
              num_voxels, nsipms, npmts,
              block=(1, 1, 1), grid=(int(num_voxels), 1))
+    tend = time.time()
+    print("MLEM: {}".format(tend-tstart))
 
+
+    tstart = time.time()
     voxels_out_h = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
+    tend = time.time()
+    print("Copy voxels from device: {}".format(tend-tstart))
     return voxels_out_h
