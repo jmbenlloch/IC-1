@@ -11,7 +11,7 @@ from invisible_cities.evm.ic_containers import SensorsParams
 
 # Define types
 # due to packing the c struct has 4 bytes for the boolean (maybe pragma pack...)
-voxels_dt      = np.dtype([('x', 'f4'), ('y', 'f4'), ('E', 'f4'), ('active', 'i4')])
+voxels_dt      = np.dtype([('x', 'f4'), ('y', 'f4'), ('E', 'f4')])
 sensors_dt     = np.dtype([('id', 'i4'), ('charge', 'f4'), ('active', 'i4')])
 corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
 active_dt      = np.dtype([('id', 'i1')])
@@ -69,7 +69,7 @@ class RESET:
         self.ctx.detach()
 
     def _compile(self):
-        kernel_code = open('reset_non_compact.cu').read()
+        kernel_code = open('reset_compact.cu').read()
         self.cudaf = SourceModule(kernel_code)
 
     def _load_xy_positions(self):
@@ -121,23 +121,23 @@ class RESET:
         print("Create cath response: {}".format(tend-tstart))
 
         tstart = time.time()
-        active_sipms_d, probs_sipms_d = compute_active_sensors(self.cudaf,
-                        num_voxels, voxels_d, self.nsipms, self.xs_sipms_d,
-                        self.ys_sipms_d, sensors_sipms_d, self.sipm_dist,
-                        self.sipm_param, self.sipms_corr_d)
+#        active_sipms_d, probs_sipms_d = compute_active_sensors(self.cudaf,
+#                        num_voxels, voxels_d, self.nsipms, self.xs_sipms_d,
+#                        self.ys_sipms_d, sensors_sipms_d, self.sipm_dist,
+#                        self.sipm_param, self.sipms_corr_d)
         tend = time.time()
         print("Compute active SiPMs: {}".format(tend-tstart))
 
         tstart = time.time()
-        active_pmts_d, probs_pmts_d = compute_active_sensors(self.cudaf,
-                        num_voxels, voxels_d, self.npmts, self.xs_pmts_d,
-                        self.ys_pmts_d, sensors_pmts_d, self.pmt_dist,
-                        self.pmt_param, self.pmts_corr_d)
+#        active_pmts_d, probs_pmts_d = compute_active_sensors(self.cudaf,
+#                        num_voxels, voxels_d, self.npmts, self.xs_pmts_d,
+#                        self.ys_pmts_d, sensors_pmts_d, self.pmt_dist,
+#                        self.pmt_param, self.pmts_corr_d)
         tend = time.time()
         print("Compute active PMTs: {}".format(tend-tstart))
 
         tstart = time.time()
-        run_mlem_step(self.cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d, probs_sipms_d, probs_pmts_d, active_sipms_d, active_pmts_d, num_voxels, self.nsipms, self.npmts)
+#        run_mlem_step(self.cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d, probs_sipms_d, probs_pmts_d, active_sipms_d, active_pmts_d, num_voxels, self.nsipms, self.npmts)
         tend = time.time()
         print("Run MLEM step: {}".format(tend-tstart))
 
@@ -158,14 +158,44 @@ def create_voxels(cudaf, sensor_ids, charges, sipm_thr, dist,
     threads_y = int((ymax - ymin) / ysize)
     print(threads_x, threads_y)
 
-    num_voxels = threads_x * threads_y
+    nvoxels_non_compact = threads_x * threads_y
 
     #allocate memory for result
-    voxels_d = cuda.mem_alloc(num_voxels * voxels_dt.itemsize)
-    func = cudaf.get_function('create_voxels')
-    func(voxels_d, xmin, xmax, ymin, ymax, xsize, ysize, rmax, charge,
-         block=(1, 1, 1), grid=(threads_x, threads_y))
+    voxels_non_compact_d  = cuda.mem_alloc(nvoxels_non_compact
+                                           * voxels_dt.itemsize)
+    address_d = cuda.mem_alloc(nvoxels_non_compact * 4)
+    active_d  = cuda.mem_alloc(nvoxels_non_compact)
+
+    create_voxels = cudaf.get_function('create_voxels_compact')
+    create_voxels(voxels_non_compact_d, address_d, active_d, xmin, xmax,
+         ymin, ymax, xsize, ysize, rmax, charge,
+         block=(threads_y, 1, 1), grid=(threads_x, 1))
+
+    #compute number of voxels
+    # Takes the last element of each scan algorithm from each block
+    address_h = cuda.from_device(address_d, (nvoxels_non_compact,),
+                                 np.dtype('i4'))
+    print(address_h)
+    num_voxels = address_h[threads_y-1::threads_y].sum()
+    print (num_voxels)
+
+    voxels_d = cuda.mem_alloc(nvoxels_non_compact * voxels_dt.itemsize)
+    compact_voxels = cudaf.get_function('compact_voxels')
+    compact_voxels(voxels_non_compact_d, voxels_d, address_d,
+                   active_d, np.int32(threads_y),
+                   block=(threads_x, 1, 1), grid=(1, 1),
+                   shared=threads_x*4)
+
+
     voxels_h = cuda.from_device(voxels_d, (num_voxels,), voxels_dt)
+    print(voxels_h)
+    print(voxels_h.shape)
+
+    print("efficiency: {} = {}/{}".format(num_voxels/(threads_x*threads_y), num_voxels, threads_x*threads_y))
+
+    voxels_non_compact_d.free()
+    address_d.free()
+    active_d.free()
 
     return xmin, xmax, ymin, ymax, np.int32(num_voxels), voxels_d, voxels_h
 
@@ -181,8 +211,8 @@ def create_anode_response(cudaf, sensor_ids_d, charges_d, nsensors,
          block=(1, 1, 1), grid=(int(total_sipms), 1))
     # Step 2: Put the correct charge for active sensors
     func = cudaf.get_function('create_anode_response')
-#    func(sensors_sipms_d, sensor_ids_d, charges_d,
-#         block=(1, 1, 1), grid=(int(nsensors), 1))
+    func(sensors_sipms_d, sensor_ids_d, charges_d,
+         block=(1, 1, 1), grid=(int(nsensors), 1))
     return sensors_sipms_d
 
 # Energy already corrected, decide where to do that...
@@ -241,7 +271,7 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
     tstart = time.time()
 #    voxels_out_h = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
     voxels_out_h = np.empty((num_voxels,), dtype=voxels_dt)
-#    cuda.memcpy_dtoh(voxels_out_h, voxels_out_d)
+    cuda.memcpy_dtoh(voxels_out_h, voxels_out_d)
     tend = time.time()
     print("Copy voxels from device: {}".format(tend-tstart))
     return voxels_out_h

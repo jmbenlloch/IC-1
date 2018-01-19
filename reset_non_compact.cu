@@ -41,6 +41,41 @@ __global__ void create_voxels(voxel * voxels, float xmin, float xmax,
 	//printf("[%d, %d]: x=%f, y=%f, E=%f, active=%d\n", blockIdx.x, blockIdx.y, v->x, v->y, v->E, v->active);
 }
 
+
+// Launch: block < (xmax - xmin)/xsize, (ymax - ymin)/ysize >, grid <1,1>
+// All voxels are initialized with "charge" and only those within 
+// fiducial volume are set to be active
+__global__ void create_voxels_compact(voxel * voxels, int * address, 
+		float xmin, float xmax, float ymin, float ymax, 
+		float xsize, float ysize, float rmax, float charge){
+
+	float x = xmin + xsize * threadIdx.x;
+	float y = ymin + ysize * threadIdx.y;
+	bool active = sqrtf(x*x + y*y) < rmax;
+
+	// Mem layout: voxels[x][y]
+	int pos = threadIdx.x * blockDim.y + threadIdx.y;
+	address[pos] = active;
+	__syncthreads();
+
+	// Scan algoritm (Hillis-Steele)
+	for(int idx=1; pos <= idx; idx <<= 1){
+		int new_value = address[pos] + address[pos - idx];
+		__syncthreads();
+		address[pos] = new_value;
+	}
+
+	//Write active voxels in their address
+	// Addresses are shifted 1 position due to scan algorithm
+
+	if(active){
+		voxel * v = voxels + address[pos] - 1;
+		v->x = x;
+		v->y = y;
+		v->E = charge;
+	}
+}
+
 // Launch <<< nsensors = 1792 >>>
 __global__ void initialize_anode(sensor * sensors, 
 		float xmin, float xmax, float * xs, 
@@ -112,12 +147,12 @@ __global__ void forward_projection(float * forward_projection,
 
 	float denom = 0;
 	for(int i=0; i<nvoxels; i++){
-		if(selection[i * nsensors + blockIdx.x]){
+//		if(selection[i * nsensors + blockIdx.x]){
 			denom += voxels[i].E * probs[blockIdx.x * nsensors + i];
-		}
+//		}
 	}
 	forward_projection[blockIdx.x] = denom;
-	printf("forward[%d] = %f\n", blockIdx.x, forward_projection[blockIdx.x]);
+	//printf("forward[%d] = %f\n", blockIdx.x, forward_projection[blockIdx.x]);
 }
 
 
@@ -143,12 +178,8 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 			efficiency += sipm_prob[blockIdx.x * nsipms + i];
 			// Add forward projection
 			float num = anode_response[i].charge * sipm_prob[blockIdx.x * nsipms + i];
-			float denom = 0;
-			for(int j=0; j<nvoxels; j++){
-				if(sipm_selection[j * nsipms + i]){
-					denom += voxels[j].E * sipm_prob[j * nsipms + i];
-				}
-			}
+			//TODO: protect in case of 0 division
+			float denom = forward_sipm[i];
 			anode_forward += num/denom;
 		}
 	}
@@ -161,12 +192,8 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 			efficiency += pmt_prob[blockIdx.x * npmts + i];
 			// Add forward projection
 			float num = cath_response[i].charge * pmt_prob[blockIdx.x * npmts + i];
-			float denom = 0;
-			for(int j=0; j<nvoxels; j++){
-				if(pmt_selection[j * npmts + i]){
-					denom += voxels[j].E * pmt_prob[j * npmts + i];
-				}
-			}
+			float denom = forward_pmt[i];
+			anode_forward += num/denom;
 			cathode_forward += num/denom;
 		}
 	}

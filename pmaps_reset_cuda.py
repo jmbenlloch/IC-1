@@ -5,7 +5,8 @@ import invisible_cities.reco.pmaps_functions  as pmapsf
 import invisible_cities.reco.corrections    as corrf
 import invisible_cities.reco.pmaps_functions_c  as pmapsfc
 from invisible_cities.core.system_of_units import pes, mm, mus, ns
-import reset_functions as rstf
+#import reset_functions as rstf
+import reset_functions_compact as rstf
 
 import time
 
@@ -104,8 +105,10 @@ for no in valid_peaks:
     s2, s2si = rebin_s2si(s2, s2si, slice_width)
 
     for tbin, e in enumerate(s2[1]):
-        if tbin != 2:
-            continue
+        #if tbin != 2:
+#        if tbin != 7:
+#        if tbin != 0:
+#            continue
         print ("\n\nTime bin: {}".format(tbin))
 
         tstart = time.time()
