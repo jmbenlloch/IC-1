@@ -106,9 +106,9 @@ for no in valid_peaks:
 
     for tbin, e in enumerate(s2[1]):
         #if tbin != 2:
-#        if tbin != 7:
+        if tbin != 7:
 #        if tbin != 0:
-#            continue
+            continue
         print ("\n\nTime bin: {}".format(tbin))
 
         tstart = time.time()

@@ -6,6 +6,7 @@ from pycuda.compiler import SourceModule
 from pycuda.tools import make_default_context
 
 import time
+import pdb
 
 from invisible_cities.evm.ic_containers import SensorsParams
 
@@ -121,10 +122,10 @@ class RESET:
         print("Create cath response: {}".format(tend-tstart))
 
         tstart = time.time()
-#        active_sipms_d, probs_sipms_d = compute_active_sensors(self.cudaf,
-#                        num_voxels, voxels_d, self.nsipms, self.xs_sipms_d,
-#                        self.ys_sipms_d, sensors_sipms_d, self.sipm_dist,
-#                        self.sipm_param, self.sipms_corr_d)
+        active_sipms_d, probs_sipms_d = compute_active_sensors(self.cudaf,
+                        num_voxels, voxels_d, self.nsipms, self.xs_sipms_d,
+                        self.ys_sipms_d, sensors_sipms_d, self.sipm_dist,
+                        self.sipm_param, self.sipms_corr_d)
         tend = time.time()
         print("Compute active SiPMs: {}".format(tend-tstart))
 
@@ -230,11 +231,18 @@ def compute_active_sensors(cudaf, num_voxels, voxels_d, nsensors, xs_d, ys_d,
     # TODO: Update after compact
     active_d = cuda.mem_alloc(int(num_voxels * nsensors))
     probs_d  = cuda.mem_alloc(int(num_voxels * nsensors * 4))
+    scan_d   = cuda.mem_alloc(int(num_voxels * nsensors * 4))
     func = cudaf.get_function('compute_active_sensors')
-    func(active_d, probs_d, sensors_d, voxels_d, xs_d, ys_d, nsensors,
+    func(active_d, probs_d, scan_d, sensors_d, voxels_d, xs_d, ys_d, nsensors,
          sensor_dist, sensor_param.step, sensor_param.nbins,
          sensor_param.xmin, sensor_param.ymin, params_d,
          block=(1, 1, 1), grid=(int(num_voxels), 1))
+
+    active_h = cuda.from_device(active_d, (num_voxels, nsensors), np.dtype('i1'))
+    scan_h = cuda.from_device(scan_d,   (num_voxels, nsensors), np.dtype('i4'))
+
+#    pdb.set_trace()
+
     return active_d, probs_d
 
 ## Run MLEM step

@@ -13,6 +13,11 @@ struct sensor{
 	bool active;
 };
 
+struct correction{
+	float x;
+	float y;
+	float factor;
+};
 
 // Launch: block < (xmax - xmin)/xsize, (ymax - ymin)/ysize >, grid <1,1>
 // All voxels are initialized with "charge" and only those within 
@@ -117,5 +122,46 @@ __global__ void create_anode_response(sensor * sensors, int * ids, float * charg
 	s->charge = charges[blockIdx.x];
 
 	//  printf("[%d]: id=%d, %d, charge=%f, active=%d\n", blockIdx.x, id, s->id, s->charge, s->active);
+}
+
+
+// Launch < nvoxels >
+// active[nvoxels][nsensors]  / probabilities[nvoxels][nsensors]
+// scan[nvoxels][nsensors]
+//TODO: Use threads within the block to avoid the for loop
+__global__ void compute_active_sensors(bool * active, float * probabilities,
+		int * scan,
+		sensor * sensors, voxel * voxels, float * xs, float * ys,
+		int nsensors, float sensor_dist,
+		float step, int nbins, float xmin, float ymin, correction * corrections){
+	int count = 0;
+	for(int i=0; i<nsensors; i++){
+		int idx = blockIdx.x * nsensors + i;
+		int id  = sensors[i].id;
+
+		float xdist = voxels[blockIdx.x].x - xs[id];
+		float ydist = voxels[blockIdx.x].y - ys[id];
+
+		bool voxel_sensor = ((abs(xdist) <= sensor_dist) &&
+				(abs(ydist) <= sensor_dist));
+		active[idx] = voxel_sensor;
+		count += voxel_sensor;
+		scan[idx] = count;
+
+		// Compute probability
+		// In order to avoid accesing wrong parts of the memory 
+		// if the sensor is not active for a particular voxel,
+		// then we will use index 0.
+		// Rounding: plus 0.5 and round down
+		int xindex = __float2int_rd((xdist - xmin) / step * voxel_sensor + 0.5f);
+		int yindex = __float2int_rd((ydist - ymin) / step * voxel_sensor + 0.5f);
+		int prob_idx = xindex * nbins + yindex;
+		probabilities[idx] = corrections[prob_idx].factor;
+
+		//      printf("[%d]: idx=%d, p=%f, pidx=%d, xindex=%d, %f, nbins=%d, yindex=%d, %f\n", blockIdx.x, idx, probabilities[idx], prob_idx, xindex, xdist, nbins, yindex, ydist);
+
+		//      printf("[%d]: id=%d, xdist=%f, ydist=%f, active=%d\n", blockIdx.x, id, xdist, ydist, active[idx], probabilities[idx]);
+
+	}
 }
 
