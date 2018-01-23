@@ -241,7 +241,41 @@ def compute_active_sensors(cudaf, num_voxels, voxels_d, nsensors, xs_d, ys_d,
     active_h = cuda.from_device(active_d, (num_voxels, nsensors), np.dtype('i1'))
     scan_h = cuda.from_device(scan_d,   (num_voxels, nsensors), np.dtype('i4'))
 
-#    pdb.set_trace()
+
+    active_d = cuda.mem_alloc(int(num_voxels * nsensors))
+    probs_d  = cuda.mem_alloc(int(num_voxels * nsensors * 4))
+    scan_d   = cuda.mem_alloc(int(num_voxels * nsensors * 4))
+    # assumes even number, currently 1792
+    threads_x = nsensors if nsensors < 1024 else nsensors/2 #assumes even number, currently 1792
+    block = (int(threads_x), 1, 1)
+    print (block)
+
+    nvox = int(num_voxels)
+    #nvox = 30
+    func = cudaf.get_function('compute_active_sensors_block')
+    func(active_d, probs_d, scan_d, sensors_d, voxels_d, xs_d, ys_d, nsensors,
+         sensor_dist, sensor_param.step, sensor_param.nbins,
+         sensor_param.xmin, sensor_param.ymin, params_d,
+         #block=block, grid=(int(num_voxels), 1))
+         block=block, grid=(nvox, 1))
+
+    active2_h = cuda.from_device(active_d, (num_voxels, nsensors), np.dtype('i1'))
+    scan2_h = cuda.from_device(scan_d,   (num_voxels, nsensors), np.dtype('i4'))
+
+    for j in range(nvox):
+        scan2_h[j,896:] = scan2_h[j,895] + scan2_h[j,896:]
+    print ((scan_h == scan2_h).all())
+    print ((scan_h[:nvox,:896] == scan2_h[:nvox,:896]).all())
+    print ((scan_h[:nvox,896:] == scan2_h[:nvox,896:]).all())
+    print (scan_h[:nvox].sum())
+    print (scan2_h[:nvox].sum())
+
+    for j in range(nvox):
+        for i, b in enumerate(scan_h[j]):
+            if b != scan2_h[j][i]:
+                print("ERROR: [{},{}], {} {}".format(j, i,b,scan2_h[j][i]))
+
+   # pdb.set_trace()
 
     return active_d, probs_d
 

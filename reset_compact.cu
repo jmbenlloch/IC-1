@@ -165,3 +165,81 @@ __global__ void compute_active_sensors(bool * active, float * probabilities,
 	}
 }
 
+
+// Launch block: < nsensors || nsensors//2, 1, 1) 
+// grid < nvoxels, 1 >
+// active[nvoxels][nsensors]  / probabilities[nvoxels][nsensors]
+// scan[nvoxels][nsensors]
+__global__ void compute_active_sensors_block(bool * active, float * probabilities,
+		int * scan,
+		sensor * sensors, voxel * voxels, float * xs, float * ys,
+		int nsensors, float sensor_dist,
+		float step, int nbins, float xmin, float ymin, correction * corrections){
+
+	int base_addr = blockIdx.x * nsensors;
+	for(int i=0; i<(nsensors/blockDim.x); i++){
+		int sidx = 2*threadIdx.x + i;
+		int idx  = base_addr + sidx;
+		int id   = sensors[sidx].id;
+
+		float xdist = voxels[blockIdx.x].x - xs[id];
+		float ydist = voxels[blockIdx.x].y - ys[id];
+
+		bool voxel_sensor = ((abs(xdist) <= sensor_dist) &&
+				(abs(ydist) <= sensor_dist));
+		active[idx] = voxel_sensor;
+		scan[idx]   = voxel_sensor;
+//		scan[idx] = 1;
+
+//		printf("[b: %d, t:%d]: i:%d, sidx:%d, id: %d, active: %d\n", blockIdx.x, threadIdx.x, i, sidx, id, voxel_sensor);
+
+		// Compute probability
+		// In order to avoid accesing wrong parts of the memory 
+		// if the sensor is not active for a particular voxel,
+		// then we will use index 0.
+		// Rounding: plus 0.5 and round down
+		int xindex = __float2int_rd((xdist - xmin) / step * voxel_sensor + 0.5f);
+		int yindex = __float2int_rd((ydist - ymin) / step * voxel_sensor + 0.5f);
+		int prob_idx = xindex * nbins + yindex;
+		probabilities[idx] = corrections[prob_idx].factor;
+
+		//      printf("[%d]: idx=%d, p=%f, pidx=%d, xindex=%d, %f, nbins=%d, yindex=%d, %f\n", blockIdx.x, idx, probabilities[idx], prob_idx, xindex, xdist, nbins, yindex, ydist);
+
+		//      printf("[%d]: id=%d, xdist=%f, ydist=%f, active=%d\n", blockIdx.x, id, xdist, ydist, active[idx], probabilities[idx]);
+
+	}
+
+	// Each thread will apply Hillis-Steele algorithm for two halves
+	// 0 1 1 0 | 1 1 0 1
+	// 0 1 2 2 | 1 2 2 3
+	//        +2 3 4 4 5
+	// 0 1 2 2 | 3 4 4 5
+	int pos1 = base_addr + threadIdx.x;
+	int pos2 = pos1 + blockDim.x; // second half
+	for(int idx=1; idx < blockDim.x; idx <<= 1){
+		int value1, value2;
+		if (idx <= threadIdx.x){
+			value1 = scan[pos1] + scan[pos1 - idx];
+			value2 = scan[pos2] + scan[pos2 - idx];
+		}
+	//	printf("[%d, %d] value: %d, idx: %d, pos: %d\n" , blockIdx.x, threadIdx.x, scan[pos1], idx, pos1);
+//		printf("[%d, %d] value: %d, idx: %d, pos: %d\n" , blockIdx.x, threadIdx.x, scan[pos2], idx, pos2);
+
+		__syncthreads();
+
+		if (idx <= threadIdx.x){
+			scan[pos1] = value1;
+			scan[pos2] = value2;
+		}
+	}
+	// Add last value from first half to all elements in the 2nd
+//	printf("[%d, %d]\n", blockIdx.x, threadIdx.x, scan[base_addr + nsen]);
+
+
+	__syncthreads();
+
+	//printf("[%d, %d]: %d, new: %d, offset:%d, base: %d\n", blockIdx.x, threadIdx.x, scan[pos2], scan[pos2] + scan[base_addr + blockDim.x - 1] , scan[base_addr + blockDim.x - 1], base_addr + blockDim.x - 1);
+	scan[pos2] += scan[base_addr + blockDim.x - 1];
+
+}
+
