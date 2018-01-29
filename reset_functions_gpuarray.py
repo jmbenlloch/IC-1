@@ -4,6 +4,8 @@ import invisible_cities.database.load_db as dbf
 import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 from pycuda.tools import make_default_context
+from pycuda.scan import InclusiveScanKernel
+import pycuda
 
 import time
 import pdb
@@ -71,7 +73,7 @@ class RESET:
         self.ctx.detach()
 
     def _compile(self):
-        kernel_code = open('reset_compact.cu').read()
+        kernel_code = open('reset_gpuarray.cu').read()
         self.cudaf = SourceModule(kernel_code)
 
     def _load_xy_positions(self):
@@ -165,8 +167,11 @@ def create_voxels(cudaf, sensor_ids, charges, sipm_thr, dist,
     #allocate memory for result
     voxels_non_compact_d  = cuda.mem_alloc(nvoxels_non_compact
                                            * voxels_dt.itemsize)
-    address_d = cuda.mem_alloc(nvoxels_non_compact * 4)
+#    address_d = cuda.mem_alloc(nvoxels_non_compact * 4)
     active_d  = cuda.mem_alloc(nvoxels_non_compact)
+    address  = pycuda.gpuarray.empty(nvoxels_non_compact, np.dtype('i4'))
+    #TODO how to free this memory?
+    address_d  = address.gpudata
 
     create_voxels = cudaf.get_function('create_voxels_compact')
     create_voxels(voxels_non_compact_d, address_d, active_d, xmin, xmax,
@@ -174,29 +179,28 @@ def create_voxels(cudaf, sensor_ids, charges, sipm_thr, dist,
          block=(threads_y, 1, 1), grid=(threads_x, 1))
 
     #compute number of voxels
-    # Takes the last element of each scan algorithm from each block
-    address_h = cuda.from_device(address_d, (nvoxels_non_compact,),
-                                 np.dtype('i4'))
-    print(address_h)
-    num_voxels = address_h[threads_y-1::threads_y].sum()
+    scan = InclusiveScanKernel(np.int32, "a+b")
+    scan(address)
+    num_voxels = address.get()[-1]
     print (num_voxels)
+    voxels_h = cuda.from_device(voxels_non_compact_d, (nvoxels_non_compact,), voxels_dt)
+#    print(voxels_h)
 
     voxels_d = cuda.mem_alloc(nvoxels_non_compact * voxels_dt.itemsize)
     compact_voxels = cudaf.get_function('compact_voxels')
     compact_voxels(voxels_non_compact_d, voxels_d, address_d,
                    active_d, np.int32(threads_y),
-                   block=(threads_x, 1, 1), grid=(1, 1),
-                   shared=threads_x*4)
-
+                   block=(threads_x, 1, 1), grid=(1, 1))
 
     voxels_h = cuda.from_device(voxels_d, (num_voxels,), voxels_dt)
-    print(voxels_h)
-    print(voxels_h.shape)
+#    print(voxels_h)
+#    print(voxels_h.shape)
 
     print("efficiency: {} = {}/{}".format(num_voxels/(threads_x*threads_y), num_voxels, threads_x*threads_y))
 
+#    pdb.set_trace()
     voxels_non_compact_d.free()
-    address_d.free()
+    #address_d.free()
     active_d.free()
 
     return xmin, xmax, ymin, ymax, np.int32(num_voxels), voxels_d, voxels_h
@@ -232,59 +236,52 @@ def compute_active_sensors(cudaf, num_voxels, voxels_d, nsensors, xs_d, ys_d,
     # TODO: Update after compact
     active_d = cuda.mem_alloc(int(num_voxels * nsensors))
     probs_d  = cuda.mem_alloc(int(num_voxels * nsensors * 4))
-    scan_d   = cuda.mem_alloc(int(num_voxels * nsensors * 4))
-    func = cudaf.get_function('compute_active_sensors')
-    func(active_d, probs_d, scan_d, voxels_d, xs_d, ys_d, nsensors,
+    address = pycuda.gpuarray.empty(int(num_voxels * nsensors), np.dtype('i4'))
+    address_d = address.gpudata
+
+    # assumes even number, currently 1792
+    threads_x = nsensors if nsensors < 1024 else nsensors/2 #assumes even number, currently 1792
+    block = (int(threads_x), 1, 1)
+    print (block)
+
+    nvox = int(num_voxels)
+#    nvox = 1
+    func = cudaf.get_function('compute_active_sensors_block')
+    func(active_d, probs_d, address_d, voxels_d, xs_d, ys_d, nsensors,
          sensor_dist, sensor_param.step, sensor_param.nbins,
          sensor_param.xmin, sensor_param.ymin, params_d,
-         block=(1, 1, 1), grid=(int(num_voxels), 1))
+         #block=block, grid=(int(num_voxels), 1))
+         block=block, grid=(nvox, 1))
 
-    active_h = cuda.from_device(active_d, (num_voxels, nsensors), np.dtype('i1'))
-    scan_h = cuda.from_device(scan_d,   (num_voxels, nsensors), np.dtype('i4'))
+#    probs_h = cuda.from_device(probs_d, (int(num_voxels * nsensors * 4),), np.dtype('f4'))
+    active_h  = cuda.from_device(active_d,  (int(num_voxels * nsensors),), np.dtype('i1'))
+#    address_h = cuda.from_device(address_d, (int(num_voxels * nsensors * 4),), np.dtype('i4'))
 
+    scan = InclusiveScanKernel(np.int32, "a+b")
+    scan(address)
+    probs_size = address.get()[-1]
 
-    probs_compact_d  = cuda.mem_alloc(int(num_voxels * nsensors * 4))
-    offset_d = cuda.mem_alloc(int(num_voxels))
+    probs_compact_d = cuda.mem_alloc(int(probs_size * 4))
+    sensor_probs_d  = cuda.mem_alloc(int(probs_size * 4))
+    sensor_ids_d    = cuda.mem_alloc(int(probs_size * 4))
+    voxel_start_d   = cuda.mem_alloc(int(num_voxels * 4))
+    sensor_start_d  = cuda.mem_alloc(int(nsensors   * 4))
 
     func = cudaf.get_function('compact_probabilities')
-    func(probs_d, probs_compact_d, scan_d, offset_d, nsensors,
-         block=(1, 1, 1), grid=(int(num_voxels), 1))
+    func(active_d, address_d, probs_d, probs_compact_d,
+         voxel_start_d, sensor_ids_d, nsensors,
+         block=block, grid=(nvox, 1))
+
+    print(probs_size)
 
 
-#    active_d = cuda.mem_alloc(int(num_voxels * nsensors))
-#    probs_d  = cuda.mem_alloc(int(num_voxels * nsensors * 4))
-#    scan_d   = cuda.mem_alloc(int(num_voxels * nsensors * 4))
-#    # assumes even number, currently 1792
-#    threads_x = nsensors if nsensors < 1024 else nsensors/2 #assumes even number, currently 1792
-#    block = (int(threads_x), 1, 1)
-#    print (block)
+    probs_compact_h = cuda.from_device(probs_compact_d, (probs_size,), np.dtype('f4'))
+    sensor_ids_h    = cuda.from_device(sensor_ids_d, (probs_size,), np.dtype('i4'))
+    voxel_start_h   = cuda.from_device(voxel_start_d, (num_voxels,), np.dtype('i4'))
+#    sensor_probs_h  = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
+#    sensor_start_h  = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
 
-#    nvox = int(num_voxels)
-    #nvox = 30
-#    func = cudaf.get_function('compute_active_sensors_block')
-#    func(active_d, probs_d, scan_d, sensors_d, voxels_d, xs_d, ys_d, nsensors,
-#         sensor_dist, sensor_param.step, sensor_param.nbins,
-#         sensor_param.xmin, sensor_param.ymin, params_d,
-#         #block=block, grid=(int(num_voxels), 1))
-#         block=block, grid=(nvox, 1))
-
-#    active2_h = cuda.from_device(active_d, (num_voxels, nsensors), np.dtype('i1'))
-#    scan2_h = cuda.from_device(scan_d,   (num_voxels, nsensors), np.dtype('i4'))
-
-#    for j in range(nvox):
-#        scan2_h[j,896:] = scan2_h[j,895] + scan2_h[j,896:]
-#    print ((scan_h == scan2_h).all())
-#    print ((scan_h[:nvox,:896] == scan2_h[:nvox,:896]).all())
-#    print ((scan_h[:nvox,896:] == scan2_h[:nvox,896:]).all())
-#    print (scan_h[:nvox].sum())
-#    print (scan2_h[:nvox].sum())
-
-#    for j in range(nvox):
-#        for i, b in enumerate(scan_h[j]):
-#            if b != scan2_h[j][i]:
-#                print("ERROR: [{},{}], {} {}".format(j, i,b,scan2_h[j][i]))
-
-#    pdb.set_trace()
+    pdb.set_trace()
 
     return active_d, probs_d
 

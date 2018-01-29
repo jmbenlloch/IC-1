@@ -6,7 +6,8 @@ import invisible_cities.reco.corrections    as corrf
 import invisible_cities.reco.pmaps_functions_c  as pmapsfc
 from invisible_cities.core.system_of_units import pes, mm, mus, ns
 #import reset_functions as rstf
-import reset_functions_compact as rstf
+#import reset_functions_compact as rstf
+import reset_functions_gpuarray as rstf
 
 import time
 
