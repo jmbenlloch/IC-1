@@ -108,6 +108,7 @@ __global__ void compute_active_sensors_block(bool * active, float * probabilitie
 		int xindex = __float2int_rd((xdist - xmin) / step * voxel_sensor + 0.5f);
 		int yindex = __float2int_rd((ydist - ymin) / step * voxel_sensor + 0.5f);
 		int prob_idx = xindex * nbins + yindex;
+
 		probabilities[idx] = corrections[prob_idx].factor;
 
 		//      printf("[%d]: idx=%d, p=%f, pidx=%d, xindex=%d, %f, nbins=%d, yindex=%d, %f\n", blockIdx.x, idx, probabilities[idx], prob_idx, xindex, xdist, nbins, yindex, ydist);
@@ -142,4 +143,23 @@ __global__ void compact_probabilities(bool * active, int * address, float * prob
 		}
 	}
 
+}
+
+// Launch block: < nsensors || nsensors//2, 1, 1) 
+// grid < nvoxels, 1 >
+__global__ void transpose_probabilities(float * probs_in, float * probs_out,
+		bool * active_in, bool * active_out,
+		int * address_in, int * address_out,
+		int nvoxels, int nsensors){
+	int base_addr_in = blockIdx.x * nsensors;
+
+	for(int i=0; i<(nsensors/blockDim.x); i++){
+		int sidx = threadIdx.x + i*blockDim.x;
+		int offset_in = base_addr_in + sidx;
+		int offset_out = sidx * nvoxels + blockIdx.x;
+		
+		probs_out[offset_out]   = probs_in[offset_in];
+		active_out[offset_out]  = active_in[offset_in];
+		address_out[offset_out] = address_in[offset_in];
+	}
 }

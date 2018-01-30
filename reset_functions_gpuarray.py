@@ -239,38 +239,74 @@ def compute_active_sensors(cudaf, num_voxels, voxels_d, nsensors, xs_d, ys_d,
     address = pycuda.gpuarray.empty(int(num_voxels * nsensors), np.dtype('i4'))
     address_d = address.gpudata
 
+    active_sensor_d = cuda.mem_alloc(int(num_voxels * nsensors))
+    probs_sensor_d  = cuda.mem_alloc(int(num_voxels * nsensors * 4))
+    address_sensor = pycuda.gpuarray.empty(int(num_voxels * nsensors), np.dtype('i4'))
+    address_sensor_d = address_sensor.gpudata
+
     # assumes even number, currently 1792
     threads_x = nsensors if nsensors < 1024 else nsensors/2 #assumes even number, currently 1792
     block = (int(threads_x), 1, 1)
-    print (block)
 
     nvox = int(num_voxels)
 #    nvox = 1
+
+    print (block, nvox)
     func = cudaf.get_function('compute_active_sensors_block')
-    func(active_d, probs_d, address_d, voxels_d, xs_d, ys_d, nsensors,
+    func(active_d, probs_d, address_d, voxels_d,
+         xs_d, ys_d, nsensors,
          sensor_dist, sensor_param.step, sensor_param.nbins,
          sensor_param.xmin, sensor_param.ymin, params_d,
          #block=block, grid=(int(num_voxels), 1))
          block=block, grid=(nvox, 1))
 
-#    probs_h = cuda.from_device(probs_d, (int(num_voxels * nsensors * 4),), np.dtype('f4'))
+    probs_h = cuda.from_device(probs_d, (int(num_voxels * nsensors),), np.dtype('f4'))
     active_h  = cuda.from_device(active_d,  (int(num_voxels * nsensors),), np.dtype('i1'))
-#    address_h = cuda.from_device(address_d, (int(num_voxels * nsensors * 4),), np.dtype('i4'))
+
+    #Transpose
+    func = cudaf.get_function('transpose_probabilities')
+    func(probs_d, probs_sensor_d, active_d, active_sensor_d,
+         address_d, address_sensor_d, num_voxels, nsensors,
+         block=block, grid=(nvox, 1))
+
+    active_sensor_h  = cuda.from_device(active_sensor_d,  (int(num_voxels * nsensors),), np.dtype('i1'))
+    probs_sensor_h  = cuda.from_device(probs_sensor_d,  (int(num_voxels * nsensors),), np.dtype('f4'))
+
+    #Check they are transposed
+    a1 = active_h.reshape((num_voxels,nsensors))
+    a2 = active_sensor_h.reshape((nsensors,num_voxels))
+    assert (a1 == a2.transpose()).all()
+
+    p1 = probs_h.reshape((num_voxels,nsensors))
+    p2 = probs_sensor_h.reshape((nsensors,num_voxels))
+    assert (p1 == p2.transpose()).all()
+
+    ad1 = address.get().reshape((num_voxels,nsensors))
+    ad2 = address_sensor.get().reshape((nsensors,num_voxels))
+    assert (ad1 == ad2.transpose()).all()
 
     scan = InclusiveScanKernel(np.int32, "a+b")
     scan(address)
+    scan(address_sensor)
     probs_size = address.get()[-1]
 
     probs_compact_d = cuda.mem_alloc(int(probs_size * 4))
-    sensor_probs_d  = cuda.mem_alloc(int(probs_size * 4))
     sensor_ids_d    = cuda.mem_alloc(int(probs_size * 4))
     voxel_start_d   = cuda.mem_alloc(int(num_voxels * 4))
+
+    sensor_probs_d  = cuda.mem_alloc(int(probs_size * 4))
     sensor_start_d  = cuda.mem_alloc(int(nsensors   * 4))
 
     func = cudaf.get_function('compact_probabilities')
     func(active_d, address_d, probs_d, probs_compact_d,
          voxel_start_d, sensor_ids_d, nsensors,
          block=block, grid=(nvox, 1))
+
+    # Compact tranpose
+    func(active_d, address_d, probs_d, probs_compact_d,
+         voxel_start_d, sensor_ids_d, nsensors,
+         block=block, grid=(nvox, 1))
+
 
     print(probs_size)
 
@@ -281,7 +317,14 @@ def compute_active_sensors(cudaf, num_voxels, voxels_d, nsensors, xs_d, ys_d,
 #    sensor_probs_h  = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
 #    sensor_start_h  = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
 
-    pdb.set_trace()
+    # Check compact is correct
+    for s in range(voxel_start_h.shape[0]-1):
+        for i in range(voxel_start_h[s], voxel_start_h[s+1]):
+#            print (i)
+            assert probs_h[s*nsensors + sensor_ids_h[i]] == probs_compact_h[i]
+
+
+#    pdb.set_trace()
 
     return active_d, probs_d
 
