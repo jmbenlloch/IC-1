@@ -218,3 +218,40 @@ __global__ void forward_projection(float * forward_projection,
 	forward_projection[blockIdx.x] = denom;
 	//printf("forward[%d] = %f\n", blockIdx.x, forward_projection[blockIdx.x]);
 }
+
+
+// Launch block <1 , 1, 1>, grid <nvoxels, 1>
+__global__ void mlem_step(voxel * voxels, 
+		float * sipm_forward, float * anode_response,
+		float * sipm_probs, int * sipm_voxel_start, int * sipm_ids,
+		float * pmt_forward, float * cath_response,
+		float * pmt_probs, int * pmt_voxel_start, int * pmt_ids
+		){
+
+	float eff = 0;
+	float anode_forward = 0;
+	float cath_forward = 0;
+
+	for(int i=sipm_voxel_start[blockIdx.x]; i<sipm_voxel_start[blockIdx.x+1]; i++){
+		float prob = sipm_probs[i];
+		eff += prob;
+
+		int sensor_id = sipm_ids[i];
+		float denom = sipm_forward[sensor_id];
+		float num = anode_response[sensor_id] * prob;
+		anode_forward += num/denom;
+	}
+
+	for(int i=pmt_voxel_start[blockIdx.x]; i<pmt_voxel_start[blockIdx.x+1]; i++){
+		float prob = pmt_probs[i];
+		eff += prob;
+
+		int sensor_id = pmt_ids[i];
+		float denom = pmt_forward[sensor_id];
+		float num = cath_response[sensor_id] * prob;
+		cath_forward += num/denom;
+	}
+
+	float result = voxels[blockIdx.x].E/eff * (anode_forward + cath_forward);
+
+}
