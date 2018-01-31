@@ -201,16 +201,18 @@ __global__ void transpose_probabilities(float * probs_in, float * probs_out,
 // Arrays dimensions
 // forward_projection[nsensors], voxels[nvoxels]
 // probs[sensors, voxel]
-// Launch block <nsensors , 1, 1>, grid <nsensors, 1>
+// Launch block <1 , 1, 1>, grid <nsensors, 1>
 __global__ void forward_projection(float * forward_projection,
 		voxel * voxels, float * sensor_probs, int * sensor_start,
 		int * voxel_ids){
 
 	float denom = 0;
 	// Parallelize this for
+	//printf("[%d] start: %d, end: %d\n", blockIdx.x, sensor_start[blockIdx.x], sensor_start[blockIdx.x+1]);
 	for(int i=sensor_start[blockIdx.x]; 
-			i<sensor_start[blockIdx.x+1] ; i++){
+			i<sensor_start[blockIdx.x+1]; i++){
 		int vidx = voxel_ids[i];
+//		printf("[%d] i: %d, voxel: %d\n", blockIdx.x, i, vidx);
 		denom += voxels[vidx].E * sensor_probs[i];
 	}   
 	forward_projection[blockIdx.x] = denom;

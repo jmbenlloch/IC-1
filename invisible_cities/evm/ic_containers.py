@@ -40,6 +40,7 @@ for name, attrs in (
         ('TriggerParams'  , 'trigger_channels min_number_channels charge height width'),
         ('PeakData'       , 'charge height width'),
         ('SensorsParams'  , 'xmin ymin step nbins params'),
+        ('ProbsCompact'   , 'probs sensors_ids voxels_start sensor_probs voxel_ids sensor_start'),
         ('Measurement'    , 'value uncertainty')):
     _add_namedtuple_in_this_module(name, attrs)
 

@@ -11,6 +11,7 @@ import time
 import pdb
 
 from invisible_cities.evm.ic_containers import SensorsParams
+from invisible_cities.evm.ic_containers import ProbsCompact
 
 # Define types
 # due to packing the c struct has 4 bytes for the boolean (maybe pragma pack...)
@@ -125,7 +126,7 @@ class RESET:
         print("Create cath response: {}".format(tend-tstart))
 
         tstart = time.time()
-        active_sipms_d, probs_sipms_d = compute_active_sensors(self.cudaf,
+        sipm_probs = compute_active_sensors(self.cudaf,
                         num_voxels, voxels_d, self.nsipms, self.xs_sipms_d,
                         self.ys_sipms_d, self.sipm_dist,
                         self.sipm_param, self.sipms_corr_d)
@@ -133,7 +134,7 @@ class RESET:
         print("Compute active SiPMs: {}".format(tend-tstart))
 
         tstart = time.time()
-        active_pmts_d, probs_pmts_d = compute_active_sensors(self.cudaf,
+        pmt_probs = compute_active_sensors(self.cudaf,
                         num_voxels, voxels_d, self.npmts, self.xs_pmts_d,
                         self.ys_pmts_d, self.pmt_dist,
                         self.pmt_param, self.pmts_corr_d)
@@ -141,7 +142,9 @@ class RESET:
         print("Compute active PMTs: {}".format(tend-tstart))
 
         tstart = time.time()
-        run_mlem_step(self.cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d, probs_sipms_d, probs_pmts_d, active_sipms_d, active_pmts_d, num_voxels, self.nsipms, self.npmts)
+        run_mlem_step(self.cudaf, iterations, voxels_d, sensors_sipms_d,
+                      sensors_pmts_d, sipm_probs, pmt_probs,
+                      num_voxels, self.nsipms, self.npmts)
         tend = time.time()
         print("Run MLEM step: {}".format(tend-tstart))
 
@@ -308,10 +311,10 @@ def compute_active_sensors(cudaf, num_voxels, voxels_d, nsensors, xs_d, ys_d,
     voxel_start_h   = cuda.from_device(voxel_start_d, (num_voxels+1,), np.dtype('i4'))
 
     # Check compact is correct
-    for s in range(voxel_start_h.shape[0]-1):
-        for i in range(voxel_start_h[s], voxel_start_h[s+1]):
-#            print (i)
-            assert probs_h[s*nsensors + sensor_ids_h[i]] == probs_compact_h[i]
+#    for s in range(voxel_start_h.shape[0]-1):
+#        for i in range(voxel_start_h[s], voxel_start_h[s+1]):
+##            print (i)
+#            assert probs_h[s*nsensors + sensor_ids_h[i]] == probs_compact_h[i]
 
     threads_x = num_voxels if num_voxels < 1024 else 1024
     block = (int(threads_x), 1, 1)
@@ -331,27 +334,30 @@ def compute_active_sensors(cudaf, num_voxels, voxels_d, nsensors, xs_d, ys_d,
 
 
     # Check consistency between probs and sensor_probs
-    v = 0
-    for i,p in enumerate(probs_compact_h):
-        if i == num_voxels-1:
-            break
-        s = sensor_ids_h[i]
-        if i >= voxel_start_h[v+1]:
-            v = v+1
-        for j in range(sensor_start_h[s], sensor_start_h[s+1]):
-            if v == voxel_ids_h[j]:
-#                print (v,s, voxel_ids_h[j])
-                assert(p == sensor_probs_h[j])
+#    v = 0
+#    for i,p in enumerate(probs_compact_h):
+#        if i == num_voxels-1:
+#            break
+#        s = sensor_ids_h[i]
+#        if i >= voxel_start_h[v+1]:
+#            v = v+1
+#        for j in range(sensor_start_h[s], sensor_start_h[s+1]):
+#            if v == voxel_ids_h[j]:
+##                print (v,s, voxel_ids_h[j])
+#                assert(p == sensor_probs_h[j])
+
+
+#    return active_d, probs_d
+    probs        = ProbsCompact(probs_compact_d, sensor_ids_d, voxel_start_d,
+                                sensor_probs_d, voxel_ids_d, sensor_start_d)
 
 #    pdb.set_trace()
 
-    return active_d, probs_d
-#    return probs_compact_d, sensor_ids_d, voxel_start_h, sensor_probs_d, voxel_ids_d, sensor_start_d
+    return probs
 
 ## Run MLEM step
 def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
-                  probs_sipms_d, probs_pmts_d, active_sipms_d, active_pmts_d,
-                  num_voxels, nsipms, npmts):
+                  sipm_probs, pmt_probs, num_voxels, nsipms, npmts):
 
     print("mlem: ", num_voxels, nsipms, npmts)
 
@@ -365,13 +371,17 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
     voxels_out_d   = cuda.mem_alloc(int(num_voxels * voxels_dt.itemsize))
 
 
-#    iterations = 1
+    iterations = 1
     for i in range(iterations):
         if i > 0:
             voxels_d, voxels_out_d = voxels_out_d, voxels_d
 
-#        forward(forward_sipm_d, voxels_d, probs_sipms_d, active_sipms_d, nsipms, num_voxels, block=(1,1,1), grid=(int(nsipms), 1))
-#        forward(forward_pmt_d,  voxels_d, probs_pmts_d,  active_pmts_d,  npmts,  num_voxels, block=(1,1,1), grid=(int(npmts), 1))
+        forward(forward_sipm_d, voxels_d, sipm_probs.sensor_probs,
+                sipm_probs.sensor_start, sipm_probs.voxel_ids,
+                block=(1,1,1), grid=(int(nsipms), 1))
+        forward(forward_pmt_d,  voxels_d, pmt_probs.sensor_probs,
+                pmt_probs.sensor_start, pmt_probs.voxel_ids,
+                block=(1,1,1), grid=(int(npmts), 1))
 
 #        mlem(voxels_d, voxels_out_d, sensors_sipms_d, sensors_pmts_d,
 #             forward_pmt_d, forward_sipm_d, probs_pmts_d, probs_sipms_d,
@@ -382,9 +392,7 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
 
 
     tstart = time.time()
-#    voxels_out_h = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
-    voxels_out_h = np.empty((num_voxels,), dtype=voxels_dt)
-    cuda.memcpy_dtoh(voxels_out_h, voxels_out_d)
+    voxels_out_h = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
     tend = time.time()
     print("Copy voxels from device: {}".format(tend-tstart))
     return voxels_out_h
