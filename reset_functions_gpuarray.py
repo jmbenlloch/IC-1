@@ -363,7 +363,7 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
 
     tstart = time.time()
 
-#    mlem    = cudaf.get_function('mlem_step')
+    mlem    = cudaf.get_function('mlem_step')
     forward = cudaf.get_function('forward_projection')
 
     forward_pmt_d  = cuda.mem_alloc(int(npmts * 4))
@@ -371,7 +371,7 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
     voxels_out_d   = cuda.mem_alloc(int(num_voxels * voxels_dt.itemsize))
 
 
-    iterations = 1
+#    iterations = 1
     for i in range(iterations):
         if i > 0:
             voxels_d, voxels_out_d = voxels_out_d, voxels_d
@@ -383,10 +383,11 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
                 pmt_probs.sensor_start, pmt_probs.voxel_ids,
                 block=(1,1,1), grid=(int(npmts), 1))
 
-#        mlem(voxels_d, voxels_out_d, sensors_sipms_d, sensors_pmts_d,
-#             forward_pmt_d, forward_sipm_d, probs_pmts_d, probs_sipms_d,
-#             active_sipms_d, active_pmts_d, num_voxels, nsipms, npmts,
-#             block=(1, 1, 1), grid=(int(num_voxels), 1))
+        mlem(voxels_d, voxels_out_d, forward_sipm_d, sensors_sipms_d,
+             sipm_probs.probs, sipm_probs.voxel_start, sipm_probs.sensor_ids,
+             forward_pmt_d, sensors_pmts_d,
+             pmt_probs.probs, pmt_probs.voxel_start, pmt_probs.sensor_ids,
+             block=(1, 1, 1), grid=(int(num_voxels), 1))
     tend = time.time()
     print("MLEM: {}".format(tend-tstart))
 

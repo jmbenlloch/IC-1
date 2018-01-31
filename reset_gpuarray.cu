@@ -221,12 +221,11 @@ __global__ void forward_projection(float * forward_projection,
 
 
 // Launch block <1 , 1, 1>, grid <nvoxels, 1>
-__global__ void mlem_step(voxel * voxels, 
+__global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 		float * sipm_forward, float * anode_response,
 		float * sipm_probs, int * sipm_voxel_start, int * sipm_ids,
 		float * pmt_forward, float * cath_response,
-		float * pmt_probs, int * pmt_voxel_start, int * pmt_ids
-		){
+		float * pmt_probs, int * pmt_voxel_start, int * pmt_ids){
 
 	float eff = 0;
 	float anode_forward = 0;
@@ -253,5 +252,6 @@ __global__ void mlem_step(voxel * voxels,
 	}
 
 	float result = voxels[blockIdx.x].E/eff * (anode_forward + cath_forward);
+	voxels_out[blockIdx.x].E = result;
 
 }
