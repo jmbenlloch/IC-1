@@ -133,15 +133,15 @@ class RESET:
         print("Compute active SiPMs: {}".format(tend-tstart))
 
         tstart = time.time()
-#        active_pmts_d, probs_pmts_d = compute_active_sensors(self.cudaf,
-#                        num_voxels, voxels_d, self.npmts, self.xs_pmts_d,
-#                        self.ys_pmts_d, self.pmt_dist,
-#                        self.pmt_param, self.pmts_corr_d)
+        active_pmts_d, probs_pmts_d = compute_active_sensors(self.cudaf,
+                        num_voxels, voxels_d, self.npmts, self.xs_pmts_d,
+                        self.ys_pmts_d, self.pmt_dist,
+                        self.pmt_param, self.pmts_corr_d)
         tend = time.time()
         print("Compute active PMTs: {}".format(tend-tstart))
 
         tstart = time.time()
-#        run_mlem_step(self.cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d, probs_sipms_d, probs_pmts_d, active_sipms_d, active_pmts_d, num_voxels, self.nsipms, self.npmts)
+        run_mlem_step(self.cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d, probs_sipms_d, probs_pmts_d, active_sipms_d, active_pmts_d, num_voxels, self.nsipms, self.npmts)
         tend = time.time()
         print("Run MLEM step: {}".format(tend-tstart))
 
@@ -292,30 +292,20 @@ def compute_active_sensors(cudaf, num_voxels, voxels_d, nsensors, xs_d, ys_d,
 
     probs_compact_d = cuda.mem_alloc(int(probs_size * 4))
     sensor_ids_d    = cuda.mem_alloc(int(probs_size * 4))
-    voxel_start_d   = cuda.mem_alloc(int(num_voxels * 4))
+    voxel_start_d   = cuda.mem_alloc(int((num_voxels+1) * 4))
 
-    sensor_probs_d  = cuda.mem_alloc(int(probs_size * 4))
-    sensor_start_d  = cuda.mem_alloc(int(nsensors   * 4))
 
     func = cudaf.get_function('compact_probabilities')
     func(active_d, address_d, probs_d, probs_compact_d,
-         voxel_start_d, sensor_ids_d, nsensors,
+         voxel_start_d, sensor_ids_d, num_voxels, nsensors,
          block=block, grid=(nvox, 1))
-
-    # Compact tranpose
-    func(active_d, address_d, probs_d, probs_compact_d,
-         voxel_start_d, sensor_ids_d, nsensors,
-         block=block, grid=(nvox, 1))
-
 
     print(probs_size)
 
 
     probs_compact_h = cuda.from_device(probs_compact_d, (probs_size,), np.dtype('f4'))
     sensor_ids_h    = cuda.from_device(sensor_ids_d, (probs_size,), np.dtype('i4'))
-    voxel_start_h   = cuda.from_device(voxel_start_d, (num_voxels,), np.dtype('i4'))
-#    sensor_probs_h  = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
-#    sensor_start_h  = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
+    voxel_start_h   = cuda.from_device(voxel_start_d, (num_voxels+1,), np.dtype('i4'))
 
     # Check compact is correct
     for s in range(voxel_start_h.shape[0]-1):
@@ -323,19 +313,51 @@ def compute_active_sensors(cudaf, num_voxels, voxels_d, nsensors, xs_d, ys_d,
 #            print (i)
             assert probs_h[s*nsensors + sensor_ids_h[i]] == probs_compact_h[i]
 
+    threads_x = num_voxels if num_voxels < 1024 else 1024
+    block = (int(threads_x), 1, 1)
+
+    sensor_probs_d = cuda.mem_alloc(int(probs_size * 4))
+    voxel_ids_d    = cuda.mem_alloc(int(probs_size * 4))
+    sensor_start_d = cuda.mem_alloc(int((nsensors+1) * 4))
+
+    func = cudaf.get_function('compact_probs_sensor')
+    func(active_sensor_d, address_sensor_d, probs_sensor_d, sensor_probs_d,
+         sensor_start_d, voxel_ids_d, num_voxels, nsensors,
+         block=block, grid=(int(nsensors), 1))
+
+    sensor_probs_h = cuda.from_device(sensor_probs_d, (probs_size,), np.dtype('f4'))
+    sensor_start_h = cuda.from_device(sensor_start_d, (nsensors+1,), np.dtype('i4'))
+    voxel_ids_h    = cuda.from_device(voxel_ids_d, (probs_size,), np.dtype('i4'))
+
+
+    # Check consistency between probs and sensor_probs
+    v = 0
+    for i,p in enumerate(probs_compact_h):
+        if i == num_voxels-1:
+            break
+        s = sensor_ids_h[i]
+        if i >= voxel_start_h[v+1]:
+            v = v+1
+        for j in range(sensor_start_h[s], sensor_start_h[s+1]):
+            if v == voxel_ids_h[j]:
+#                print (v,s, voxel_ids_h[j])
+                assert(p == sensor_probs_h[j])
 
 #    pdb.set_trace()
 
     return active_d, probs_d
+#    return probs_compact_d, sensor_ids_d, voxel_start_h, sensor_probs_d, voxel_ids_d, sensor_start_d
 
 ## Run MLEM step
 def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
                   probs_sipms_d, probs_pmts_d, active_sipms_d, active_pmts_d,
                   num_voxels, nsipms, npmts):
 
+    print("mlem: ", num_voxels, nsipms, npmts)
+
     tstart = time.time()
 
-    mlem    = cudaf.get_function('mlem_step')
+#    mlem    = cudaf.get_function('mlem_step')
     forward = cudaf.get_function('forward_projection')
 
     forward_pmt_d  = cuda.mem_alloc(int(npmts * 4))
@@ -348,13 +370,13 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
         if i > 0:
             voxels_d, voxels_out_d = voxels_out_d, voxels_d
 
-        forward(forward_sipm_d, voxels_d, probs_sipms_d, active_sipms_d, nsipms, num_voxels, block=(1,1,1), grid=(int(nsipms), 1))
-        forward(forward_pmt_d,  voxels_d, probs_pmts_d,  active_pmts_d,  npmts,  num_voxels, block=(1,1,1), grid=(int(npmts), 1))
+#        forward(forward_sipm_d, voxels_d, probs_sipms_d, active_sipms_d, nsipms, num_voxels, block=(1,1,1), grid=(int(nsipms), 1))
+#        forward(forward_pmt_d,  voxels_d, probs_pmts_d,  active_pmts_d,  npmts,  num_voxels, block=(1,1,1), grid=(int(npmts), 1))
 
-        mlem(voxels_d, voxels_out_d, sensors_sipms_d, sensors_pmts_d,
-             forward_pmt_d, forward_sipm_d, probs_pmts_d, probs_sipms_d,
-             active_sipms_d, active_pmts_d, num_voxels, nsipms, npmts,
-             block=(1, 1, 1), grid=(int(num_voxels), 1))
+#        mlem(voxels_d, voxels_out_d, sensors_sipms_d, sensors_pmts_d,
+#             forward_pmt_d, forward_sipm_d, probs_pmts_d, probs_sipms_d,
+#             active_sipms_d, active_pmts_d, num_voxels, nsipms, npmts,
+#             block=(1, 1, 1), grid=(int(num_voxels), 1))
     tend = time.time()
     print("MLEM: {}".format(tend-tstart))
 

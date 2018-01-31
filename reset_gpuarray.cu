@@ -84,7 +84,7 @@ __global__ void compute_active_sensors_block(bool * active, float * probabilitie
 
 	int base_addr = blockIdx.x * nsensors;
 	for(int i=0; i<(nsensors/blockDim.x); i++){
-		int sidx = 2*threadIdx.x + i; //TODO CHECK
+		int sidx = threadIdx.x + i * blockDim.x;
 		//now thread i will take i and i+1
 		// probably due to cache is better to take i and i+blockDim.x
 		int idx  = base_addr + sidx;
@@ -121,18 +121,21 @@ __global__ void compute_active_sensors_block(bool * active, float * probabilitie
 
 // Launch block: < nsensors || nsensors//2, 1, 1) 
 // grid < nvoxels, 1 >
-__global__ void compact_probabilities(bool * active, int * address, float * probs_in, float * probs_out, int * voxel_start, int * sensor_ids, int nsensors){
+__global__ void compact_probabilities(bool * active, int * address,
+	   	float * probs_in, float * probs_out, int * voxel_start, 
+		int * sensor_ids, int nvoxels, int nsensors){
 
 	int base_addr = blockIdx.x * nsensors;
 	if(blockIdx.x == 0){
 		voxel_start[0] = 0;
+		voxel_start[nvoxels] = address[nvoxels * nsensors-1];
 	}else{
 		voxel_start[blockIdx.x] = address[base_addr-1];
 	}
 
 //	printf("[%d, %d]: nsensors: %d, blockdim: %d, for %d\n", blockIdx.x, threadIdx.x, nsensors, blockDim.x, (nsensors/blockDim.x));
 	for(int i=0; i<(nsensors/blockDim.x); i++){
-		int sidx = 2*threadIdx.x + i; //TODO CHECK
+		int sidx = threadIdx.x + i * blockDim.x;
 		int idx = base_addr + sidx;
 //		printf("[%d, %d]: sidx: %d, idx: %d\n", blockIdx.x, threadIdx.x, sidx, idx);
 		if(active[idx]){
@@ -143,6 +146,37 @@ __global__ void compact_probabilities(bool * active, int * address, float * prob
 		}
 	}
 
+}
+
+// Launch block: < nvoxels || 1024, 1, 1) 
+// grid < nvoxels, 1 >
+__global__ void compact_probs_sensor(bool * active, int * address, 
+		float * probs_in, float * probs_out,
+	   	int * sensor_start, int * voxel_ids, int nvoxels, int nsensors){
+
+	int base_addr = blockIdx.x * nvoxels;
+	if(blockIdx.x == 0){
+		sensor_start[0] = 0;
+		sensor_start[nsensors] = address[nvoxels * nsensors-1];
+	}else{
+		sensor_start[blockIdx.x] = address[base_addr-1];
+	}
+
+	// If nvoxels % blockDim.x != 0 -> one more iteration
+	int iterations = nvoxels / blockDim.x;
+	iterations += (iterations * blockDim.x) < nvoxels;
+	for(int i=0; i<iterations; i++){
+		int vidx = threadIdx.x + i * blockDim.x;
+		int idx = base_addr + vidx;
+		if (vidx < nvoxels){
+			if(active[idx]){
+				// addresses are shifted one position due to scan
+				int offset = address[idx] - 1;
+				probs_out[offset] = probs_in[idx];
+				voxel_ids[offset] = vidx;
+			}
+		}
+	}
 }
 
 // Launch block: < nsensors || nsensors//2, 1, 1) 
@@ -162,4 +196,23 @@ __global__ void transpose_probabilities(float * probs_in, float * probs_out,
 		active_out[offset_out]  = active_in[offset_in];
 		address_out[offset_out] = address_in[offset_in];
 	}
+}
+
+// Arrays dimensions
+// forward_projection[nsensors], voxels[nvoxels]
+// probs[sensors, voxel]
+// Launch block <nsensors , 1, 1>, grid <nsensors, 1>
+__global__ void forward_projection(float * forward_projection,
+		voxel * voxels, float * sensor_probs, int * sensor_start,
+		int * voxel_ids){
+
+	float denom = 0;
+	// Parallelize this for
+	for(int i=sensor_start[blockIdx.x]; 
+			i<sensor_start[blockIdx.x+1] ; i++){
+		int vidx = voxel_ids[i];
+		denom += voxels[vidx].E * sensor_probs[i];
+	}   
+	forward_projection[blockIdx.x] = denom;
+	//printf("forward[%d] = %f\n", blockIdx.x, forward_projection[blockIdx.x]);
 }
