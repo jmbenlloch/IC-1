@@ -3,6 +3,7 @@ import tables as tb
 import invisible_cities.database.load_db as dbf
 import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
+from pycuda.compiler import DynamicSourceModule
 from pycuda.tools import make_default_context
 from pycuda.scan import InclusiveScanKernel
 import pycuda
@@ -75,7 +76,8 @@ class RESET:
 
     def _compile(self):
         kernel_code = open('reset_gpuarray.cu').read()
-        self.cudaf = SourceModule(kernel_code)
+#        self.cudaf = SourceModule(kernel_code)
+        self.cudaf = DynamicSourceModule(kernel_code)
 
     def _load_xy_positions(self):
         #Get (x,y) positions
@@ -351,6 +353,8 @@ def compute_active_sensors(cudaf, num_voxels, voxels_d, nsensors, xs_d, ys_d,
     probs        = ProbsCompact(probs_compact_d, sensor_ids_d, voxel_start_d,
                                 sensor_probs_d, voxel_ids_d, sensor_start_d)
 
+
+#    voxels_h = cuda.from_device(voxels_d, (num_voxels,), voxels_dt)
 #    pdb.set_trace()
 
     return probs
@@ -365,13 +369,15 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
 
     mlem    = cudaf.get_function('mlem_step')
     forward = cudaf.get_function('forward_projection')
+    forward_d = cudaf.get_function("forward_projection_dynamic")
 
     forward_pmt_d  = cuda.mem_alloc(int(npmts * 4))
     forward_sipm_d = cuda.mem_alloc(int(nsipms * 4))
+    forward_sipm_dyn_d = cuda.mem_alloc(int(nsipms * 4))
     voxels_out_d   = cuda.mem_alloc(int(num_voxels * voxels_dt.itemsize))
 
 
-#    iterations = 1
+    iterations = 100
     for i in range(iterations):
         if i > 0:
             voxels_d, voxels_out_d = voxels_out_d, voxels_d
@@ -379,15 +385,25 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
         forward(forward_sipm_d, voxels_d, sipm_probs.sensor_probs,
                 sipm_probs.sensor_start, sipm_probs.voxel_ids,
                 block=(1,1,1), grid=(int(nsipms), 1))
-        forward(forward_pmt_d,  voxels_d, pmt_probs.sensor_probs,
-                pmt_probs.sensor_start, pmt_probs.voxel_ids,
-                block=(1,1,1), grid=(int(npmts), 1))
+        forward_d(forward_sipm_dyn_d, voxels_d, sipm_probs.sensor_probs,
+                sipm_probs.sensor_start, sipm_probs.voxel_ids,
+                block=(1,1,1), grid=(int(nsipms), 1))
 
-        mlem(voxels_d, voxels_out_d, forward_sipm_d, sensors_sipms_d,
-             sipm_probs.probs, sipm_probs.voxel_start, sipm_probs.sensor_ids,
-             forward_pmt_d, sensors_pmts_d,
-             pmt_probs.probs, pmt_probs.voxel_start, pmt_probs.sensor_ids,
-             block=(1, 1, 1), grid=(int(num_voxels), 1))
+        f1_h = cuda.from_device(forward_sipm_d, (nsipms,), np.dtype('f4'))
+        f2_h = cuda.from_device(forward_sipm_dyn_d, (nsipms,), np.dtype('f4'))
+
+        assert (f1_h == f2_h).all()
+#        pdb.set_trace()
+
+#        forward(forward_pmt_d,  voxels_d, pmt_probs.sensor_probs,
+#                pmt_probs.sensor_start, pmt_probs.voxel_ids,
+#                block=(1,1,1), grid=(int(npmts), 1))
+
+#        mlem(voxels_d, voxels_out_d, forward_sipm_d, sensors_sipms_d,
+#             sipm_probs.probs, sipm_probs.voxel_start, sipm_probs.sensor_ids,
+#             forward_pmt_d, sensors_pmts_d,
+#             pmt_probs.probs, pmt_probs.voxel_start, pmt_probs.sensor_ids,
+#             block=(1, 1, 1), grid=(int(num_voxels), 1))
     tend = time.time()
     print("MLEM: {}".format(tend-tstart))
 

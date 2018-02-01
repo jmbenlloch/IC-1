@@ -111,9 +111,9 @@ __global__ void compute_active_sensors_block(bool * active, float * probabilitie
 
 		probabilities[idx] = corrections[prob_idx].factor;
 
-		//      printf("[%d]: idx=%d, p=%f, pidx=%d, xindex=%d, %f, nbins=%d, yindex=%d, %f\n", blockIdx.x, idx, probabilities[idx], prob_idx, xindex, xdist, nbins, yindex, ydist);
+		//printf("[%d]: idx=%d, p=%f, pidx=%d, xindex=%d, %f, nbins=%d, yindex=%d, %f\n", blockIdx.x, idx, probabilities[idx], prob_idx, xindex, xdist, nbins, yindex, ydist);
 
-		//      printf("[%d]: id=%d, xdist=%f, ydist=%f, active=%d\n", blockIdx.x, id, xdist, ydist, active[idx], probabilities[idx]);
+//		printf("[%d]: id=%d, v=(%f, %f), s=(%f, %f), xd=%f, yd=%f, active=%d\n", blockIdx.x, sidx, voxels[blockIdx.x].x, voxels[blockIdx.x].y, xs[sidx], ys[sidx],xdist, ydist, active[idx], probabilities[idx]);
 
 	}
 }
@@ -219,6 +219,30 @@ __global__ void forward_projection(float * forward_projection,
 	//printf("forward[%d] = %f\n", blockIdx.x, forward_projection[blockIdx.x]);
 }
 
+
+__global__ void forward_projection_d(int sensor,
+		float * forward_projection,	voxel * voxels, float * sensor_probs,
+	    int * sensor_start,	int * voxel_ids){
+	float denom = 0;
+	// Parallelize this for
+	for(int i=sensor_start[sensor]; 
+			i<sensor_start[sensor+1]; i++){
+		int vidx = voxel_ids[i];
+		denom += voxels[vidx].E * sensor_probs[i];
+	}   
+	forward_projection[sensor] = denom;
+
+}
+
+// Arrays dimensions
+// forward_projection[nsensors], voxels[nvoxels]
+// probs[sensors, voxel]
+// Launch block <1 , 1, 1>, grid <nsensors, 1>
+__global__ void forward_projection_dynamic(float * forward_projection,
+		voxel * voxels, float * sensor_probs, int * sensor_start,
+		int * voxel_ids){
+	forward_projection_d<<<1,1>>>(blockIdx.x, forward_projection, voxels, sensor_probs, sensor_start, voxel_ids);
+}
 
 // Launch block <1 , 1, 1>, grid <nvoxels, 1>
 __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
