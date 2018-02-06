@@ -6,6 +6,11 @@ struct voxel{
 	float E;
 };
 
+struct segmented_scan{
+	float value;
+	int active;
+};
+
 struct correction{
 	float x;
 	float y;
@@ -219,29 +224,49 @@ __global__ void forward_projection(float * forward_projection,
 	//printf("forward[%d] = %f\n", blockIdx.x, forward_projection[blockIdx.x]);
 }
 
-
-__global__ void forward_projection_d(int sensor,
-		float * forward_projection,	voxel * voxels, float * sensor_probs,
-	    int * sensor_start,	int * voxel_ids){
-	float denom = 0;
-	// Parallelize this for
-	for(int i=sensor_start[sensor]; 
-			i<sensor_start[sensor+1]; i++){
-		int vidx = voxel_ids[i];
-		denom += voxels[vidx].E * sensor_probs[i];
-	}   
-	forward_projection[sensor] = denom;
-
-}
-
 // Arrays dimensions
 // forward_projection[nsensors], voxels[nvoxels]
 // probs[sensors, voxel]
-// Launch block <1 , 1, 1>, grid <nsensors, 1>
-__global__ void forward_projection_dynamic(float * forward_projection,
-		voxel * voxels, float * sensor_probs, int * sensor_start,
-		int * voxel_ids){
-	forward_projection_d<<<1,1>>>(blockIdx.x, forward_projection, voxels, sensor_probs, sensor_start, voxel_ids);
+__global__ void forward_projection_dynamic(segmented_scan * forward_projection,
+		voxel * voxels, float * sensor_probs, int * voxel_ids, int size){
+	int idx  = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (idx < size){
+		int vidx = voxel_ids[idx];
+		segmented_scan * forward = forward_projection + idx;
+		forward->value   = sensor_probs[idx] * voxels[vidx].E;
+		forward->active = 0;
+	}
+}
+
+// Launch < nsensors >
+__global__ void forward_projection_dynamic2(segmented_scan * forward_projection, int * sensor_start, int size){
+
+	//int sidx = blockIdx.x * blockDim.x + threadIdx.x;
+	int sidx = blockIdx.x;
+	int start = sensor_start[sidx];
+//	printf("sidx: %d, start: %d\n", sidx, start);
+	segmented_scan * forward = forward_projection + start;
+
+	//With current design, the last sensors will have sensor_start at "size"
+	if (start < size){
+		forward->active = 1;
+	}
+}
+
+// Launch < nsensors >
+__global__ void forward_projection_dynamic3(segmented_scan * forward_projection, float * forward, int * sensor_start){
+	int sidx = blockIdx.x * blockDim.x + threadIdx.x;
+	int start = sensor_start[sidx];
+	int end = sensor_start[sidx+1];
+
+	float denom = 0;
+
+	if(end-start > 0){
+		denom = forward_projection[end-1].value;
+	}
+
+	forward[sidx] = denom;
 }
 
 // Launch block <1 , 1, 1>, grid <nvoxels, 1>
