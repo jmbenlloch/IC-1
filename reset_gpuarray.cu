@@ -207,7 +207,7 @@ __global__ void transpose_probabilities(float * probs_in, float * probs_out,
 // forward_projection[nsensors], voxels[nvoxels]
 // probs[sensors, voxel]
 // Launch block <1 , 1, 1>, grid <nsensors, 1>
-__global__ void forward_projection(float * forward_projection,
+__global__ void forward_projection_serial(float * forward_projection,
 		voxel * voxels, float * sensor_probs, int * sensor_start,
 		int * voxel_ids){
 
@@ -227,7 +227,7 @@ __global__ void forward_projection(float * forward_projection,
 // Arrays dimensions
 // forward_projection[nsensors], voxels[nvoxels]
 // probs[sensors, voxel]
-__global__ void forward_projection_dynamic(segmented_scan * forward_projection,
+__global__ void forward_projection_step1(segmented_scan * forward_projection,
 		voxel * voxels, float * sensor_probs, int * voxel_ids, int size){
 	int idx  = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -240,10 +240,10 @@ __global__ void forward_projection_dynamic(segmented_scan * forward_projection,
 }
 
 // Launch < nsensors >
-__global__ void forward_projection_dynamic2(segmented_scan * forward_projection, int * sensor_start, int size){
+__global__ void forward_projection_step2(segmented_scan * forward_projection, int * sensor_start, int size){
 
-	//int sidx = blockIdx.x * blockDim.x + threadIdx.x;
-	int sidx = blockIdx.x;
+	int sidx = blockIdx.x * blockDim.x + threadIdx.x;
+	//int sidx = blockIdx.x;
 	int start = sensor_start[sidx];
 //	printf("sidx: %d, start: %d\n", sidx, start);
 	segmented_scan * forward = forward_projection + start;
@@ -255,7 +255,7 @@ __global__ void forward_projection_dynamic2(segmented_scan * forward_projection,
 }
 
 // Launch < nsensors >
-__global__ void forward_projection_dynamic3(segmented_scan * forward_projection, float * forward, int * sensor_start){
+__global__ void forward_projection_step3(segmented_scan * forward_projection, float * forward, int * sensor_start){
 	int sidx = blockIdx.x * blockDim.x + threadIdx.x;
 	int start = sensor_start[sidx];
 	int end = sensor_start[sidx+1];
