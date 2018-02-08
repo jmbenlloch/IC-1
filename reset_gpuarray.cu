@@ -11,6 +11,12 @@ struct segmented_scan{
 	int active;
 };
 
+struct mlem_scan{
+	float eff;
+	float projection;
+	int flag;
+};
+
 struct correction{
 	float x;
 	float y;
@@ -303,4 +309,48 @@ __global__ void mlem_step(voxel * voxels, voxel * voxels_out,
 	float result = voxels[blockIdx.x].E/eff * (anode_forward + cath_forward);
 	voxels_out[blockIdx.x].E = result;
 
+}
+
+
+__global__ void mlem_step1(mlem_scan * mlems, float * probs, 
+		float * forward_projection,	float * response, 
+		int * sensor_ids, int size){
+	int idx  = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (idx < size){
+		float prob = probs[idx];
+		int sid = sensor_ids[idx];
+		mlem_scan * mlem = mlems + idx;
+		mlem->eff = prob;
+//		printf("[%d, %d] idx: %d, s%d, prob: %f, r: %f, f: %f\n", blockIdx.x, threadIdx.x, idx, sid, prob, response[sid], forward_projection[sid]);
+		mlem->projection = prob * response[sid] / forward_projection[sid];
+		mlem->flag = 0;
+	}
+}
+
+__global__ void mlem_step2(mlem_scan * mlems, int * voxel_start, int size){
+
+	int vidx = blockIdx.x * blockDim.x + threadIdx.x;
+	//int sidx = blockIdx.x;
+	int start = voxel_start[vidx];
+//	printf("vidx: %d, start: %d\n", vidx, start);
+	mlem_scan * mlem = mlems + start;
+
+	//With current design, the last sensors will have sensor_start at "size"
+	if (start < size){
+		mlem->flag = 1;
+	}
+}
+
+// Launch <nvoxels> <1,1,1>
+__global__ void mlem_step3(voxel * voxels, voxel * voxels_out,
+		mlem_scan * sipm_mlems, mlem_scan * pmt_mlems,
+		int * sipm_voxel_start, int * pmt_voxel_start){
+	int idx = blockIdx.x;
+	int sipm_idx = sipm_voxel_start[idx+1]-1;
+	int pmt_idx  =  pmt_voxel_start[idx+1]-1;
+
+	float eff = sipm_mlems[sipm_idx].eff + pmt_mlems[pmt_idx].eff;
+	float projection = sipm_mlems[sipm_idx].projection + pmt_mlems[pmt_idx].projection;
+	voxels_out[idx].E = voxels[idx].E / eff * projection;
 }

@@ -23,7 +23,9 @@ corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
 active_dt      = np.dtype([('id', 'i1')])
 
 segmented_scan_dt = np.dtype([('value', 'f4'), ('flag', 'i4')])
+mlem_scan_dt = np.dtype([('eff', 'f4'), ('projection', 'f4'),('flag', 'i4')])
 pycuda.tools.get_or_register_dtype("scan_t", segmented_scan_dt)
+pycuda.tools.get_or_register_dtype("mlem_scan_t", mlem_scan_dt)
 
 header = '''
 struct scan_t {
@@ -39,6 +41,27 @@ struct scan_t {
     __device__ scan_t operator+(const scan_t& a) const{
         scan_t res;
         res.value = a.value + value * !a.active;
+        res.active = a.active || active;
+        return res;
+    }
+};
+
+struct mlem_scan_t {
+    float eff;
+    float projection;
+    int active;
+
+     __device__ mlem_scan_t& operator=(const mlem_scan_t& a){
+        eff = a.eff;
+        projection = a.projection;
+        active = a.active;
+        return *this;
+    }
+
+    __device__ mlem_scan_t operator+(const mlem_scan_t& a) const{
+        mlem_scan_t res;
+        res.eff = a.eff + eff * !a.active;
+        res.projection = a.projection + projection * !a.active;
         res.active = a.active || active;
         return res;
     }
@@ -379,7 +402,7 @@ def compute_active_sensors(cudaf, num_voxels, voxels_d, nsensors, xs_d, ys_d,
 
 
 #    voxels_h = cuda.from_device(voxels_d, (num_voxels,), voxels_dt)
-#    pdb.set_trace()
+    pdb.set_trace()
 
     return probs, probs_size
 
@@ -393,6 +416,9 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
     tstart = time.time()
 
     mlem    = cudaf.get_function('mlem_step')
+    mlem1    = cudaf.get_function('mlem_step1')
+    mlem2    = cudaf.get_function('mlem_step2')
+    mlem3    = cudaf.get_function('mlem_step3')
     forward_old = cudaf.get_function('forward_projection_serial')
     forward_1 = cudaf.get_function("forward_projection_step1")
     forward_2 = cudaf.get_function("forward_projection_step2")
@@ -408,6 +434,11 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
     forward_pmt_dyn = pycuda.gpuarray.empty(int(pmt_size), segmented_scan_dt)
     forward_pmt_dyn_d = forward_pmt_dyn.gpudata
     voxels_out_d   = cuda.mem_alloc(int(num_voxels * voxels_dt.itemsize))
+
+    sipm_mlem = pycuda.gpuarray.empty(int(sipm_size), mlem_scan_dt)
+    sipm_mlem_d = sipm_mlem.gpudata
+    pmt_mlem = pycuda.gpuarray.empty(int(pmt_size), mlem_scan_dt)
+    pmt_mlem_d = pmt_mlem.gpudata
 
     forward_sipm_threads = sipm_size // 1024
     if sipm_size % 1024 != 0:
@@ -448,7 +479,7 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
         f1_h = cuda.from_device(forward_sipm_d, (nsipms,), np.dtype('f4'))
         f2_h = cuda.from_device(forward_sipm_d2, (nsipms,), np.dtype('f4'))
 
-        assert np.allclose(f1_h, f2_h)
+#        assert np.allclose(f1_h, f2_h)
 #sensor_start_h = cuda.from_device(sipm_probs.sensor_start, (1793), np.dtype('i4'))
 #        pdb.set_trace()
 
@@ -473,7 +504,7 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
         p1_h = cuda.from_device(forward_pmt_d, (npmts,), np.dtype('f4'))
         p2_h = cuda.from_device(forward_pmt_d2, (npmts,), np.dtype('f4'))
 #        pdb.set_trace()
-        assert np.allclose(p1_h, p2_h, rtol=5e-05)
+#        assert np.allclose(p1_h, p2_h, rtol=5e-05)
 
 
         mlem(voxels_d, voxels_out_d, forward_sipm_d, sensors_sipms_d,
@@ -481,6 +512,45 @@ def run_mlem_step(cudaf, iterations, voxels_d, sensors_sipms_d, sensors_pmts_d,
              forward_pmt_d, sensors_pmts_d,
              pmt_probs.probs, pmt_probs.voxel_start, pmt_probs.sensor_ids,
              block=(1, 1, 1), grid=(int(num_voxels), 1))
+
+
+        #new mlem
+        mlem1(sipm_mlem_d, sipm_probs.probs, forward_sipm_d,
+              sensors_sipms_d, sipm_probs.sensor_ids, sipm_size,
+              block=(1024,1,1), grid=(int(forward_sipm_threads), 1))
+
+        mlem1(pmt_mlem_d, pmt_probs.probs, forward_pmt_d,
+              sensors_pmts_d, pmt_probs.sensor_ids, pmt_size,
+              block=(1024,1,1), grid=(int(forward_pmt_threads), 1))
+
+        mlem2(sipm_mlem_d, sipm_probs.voxel_start, sipm_size,
+                block=(1,1,1), grid=(int(num_voxels),1))
+
+        mlem2(pmt_mlem_d, pmt_probs.voxel_start, pmt_size,
+                block=(1,1,1), grid=(int(num_voxels),1))
+
+        voxel_start_h = cuda.from_device(sipm_probs.voxel_start, (num_voxels), np.dtype('i4'))
+        sensor_ids_h = cuda.from_device(sipm_probs.sensor_ids, (sipm_size,), np.dtype('i4'))
+        sipms_h = cuda.from_device(sensors_sipms_d, (1792), np.dtype('f4'))
+
+        mlem_scan = InclusiveScanKernel(mlem_scan_dt, "a+b", preamble=header)
+        mlem_scan(sipm_mlem)
+        mlem_scan(pmt_mlem)
+
+        voxels_out1_h = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
+
+        mlem3(voxels_d, voxels_out_d, sipm_mlem_d, pmt_mlem_d,
+              sipm_probs.voxel_start, pmt_probs.voxel_start,
+              block=(1,1,1), grid=(int(num_voxels),1))
+
+#        voxels_out2_h = cuda.from_device(voxels_out_d, (num_voxels,), voxels_dt)
+
+#        v1 = list(map(lambda v: v[2], voxels_out1_h))
+#        v2 = list(map(lambda v: v[2], voxels_out2_h))
+#        np.allclose(v1,v2)
+
+#        pdb.set_trace()
+
     tend = time.time()
     print("MLEM: {}".format(tend-tstart))
 
