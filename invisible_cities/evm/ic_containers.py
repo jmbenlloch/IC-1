@@ -41,6 +41,8 @@ for name, attrs in (
         ('PeakData'       , 'charge height width'),
         ('SensorsParams'  , 'xmin ymin step nbins params'),
         ('ProbsCompact'   , 'probs sensor_ids voxel_start sensor_probs voxel_ids sensor_start'),
+        ('Scan'           , 'data active addr'),
+        ('ResetProbs'     , 'probs transpose compact'),
         ('Measurement'    , 'value uncertainty')):
     _add_namedtuple_in_this_module(name, attrs)
 

@@ -7,7 +7,9 @@ import invisible_cities.reco.pmaps_functions_c  as pmapsfc
 from invisible_cities.core.system_of_units import pes, mm, mus, ns
 #import reset_functions as rstf
 #import reset_functions_compact as rstf
-import reset_functions_gpuarray as rstf
+import reset_functions_event as rstf
+import invisible_cities.database.load_db as dbf
+from operator import itemgetter
 
 import time
 
@@ -43,6 +45,19 @@ def rebin_s2pmt(s2pmt, stride):
     """rebin: s2 times (taking mean), s2 energies, and s2 sipm qs, by stride"""
     # cython rebin_array is returning memoryview so we need to cast as np array
     return   [corefc.rebin_array(s2pmt.t , stride, remainder=True, mean=True),               corefc.rebin_array(s2pmt.E , stride, remainder=True)]
+
+data_sipm = dbf.DataSiPM(run_number)
+def create_voxels(data_sipm, sensor_ids, charges, dist):
+    xmin = np.float32(data_sipm.X[sensor_ids].values.min()-dist)
+    xmax = np.float32(data_sipm.X[sensor_ids].values.max()+dist)
+    ymin = np.float32(data_sipm.Y[sensor_ids].values.min()-dist)
+    ymax = np.float32(data_sipm.Y[sensor_ids].values.max()+dist)
+    charge = np.float32(charges.mean())
+    return xmin, xmax, ymin, ymax, charge
+
+#TODO: check rounding here. Probably we are missing one row/column
+def nvoxels(xmin, xmax, xsize, ymin, ymax, ysize):
+    return (xmax - xmin)/ xsize * (ymax - ymin)/ ysize
 
 pmap_conf = {}
 pmap_conf['s1_emin'] = 54 * pes
@@ -105,40 +120,35 @@ for no in valid_peaks:
     s2si = s2si_all[evt].s2sid[no]
     s2, s2si = rebin_s2si(s2, s2si, slice_width)
 
+    voxels_data = []
     for tbin, e in enumerate(s2[1]):
-        #if tbin != 2:
-#        if tbin != 7:
-#        if tbin != 0:
-#            continue
-        print ("\n\nTime bin: {}".format(tbin))
-
-        tstart = time.time()
         slice_ = pmapsfc.sipm_ids_and_charges_in_slice(s2si, tbin)
-        tend = time.time()
-        print("sipm_ids_and_charges_in_slice time: {}".format(tend-tstart))
-
-        if len(slice_[0]) <= 0:
-            continue
-
-        tstart = time.time()
         z = (np.average(s2[0][tbin], weights=s2[1][tbin]) - t0)/1000.
-        tend = time.time()
-        print("Z compute time: {}".format(tend-tstart))
-
-        if(z>550):
-            continue
-
-        tstart = time.time()
         sensor_ids = slice_[0].astype('i4')
         charges = np.array(slice_[1]*ZCorr(z).value, dtype='f4')
         s2e = e * ZCorr(z).value
-        tend = time.time()
-        print("castings: {}".format(tend-tstart))
 
-        tstart = time.time()
-        reset.run(sensor_ids, charges, s2e, iterations)
-        tend = time.time()
-        print("Reset time: {}".format(tend-tstart))
+        selC = (charges > sipm_thr)
+        if selC.any():
+            voxels_data.append(create_voxels(data_sipm, slice_[0][selC], charges, dist))
+
+
+    xmin   = np.array(list(map(itemgetter(0), voxels_data)), dtype='f4')
+    xmax   = np.array(list(map(itemgetter(1), voxels_data)), dtype='f4')
+    ymin   = np.array(list(map(itemgetter(2), voxels_data)), dtype='f4')
+    ymax   = np.array(list(map(itemgetter(3), voxels_data)), dtype='f4')
+    charge = np.array(list(map(itemgetter(4), voxels_data)), dtype='f4')
+
+    nslices = xmin.shape[0]
+    slices_start = np.empty(nslices)
+    for i in range(nslices):
+        slices_start[i] = nvoxels(xmin[i], xmax[i], x_size, ymin[i], ymax[i], y_size)
+    slices_start = slices_start.cumsum()
+    #Shift all elements one position to use them as indexes for mem
+    slices_start = np.concatenate(([0], slices_start)).astype('i4')
+
+    #reset.run(sensor_ids, charges, s2e, iterations)
+    reset.run(xmin, xmax, ymin, ymax, charge, slices_start, iterations)
 
 reset._destroy_context()
 
