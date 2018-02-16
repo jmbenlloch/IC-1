@@ -200,6 +200,10 @@ def create_voxels(cudaf, xmin_d, xmax_d, ymin_d, ymax_d, charges_d,
     address  = pycuda.gpuarray.empty(nslices * max_voxels, np.dtype('i4'))
     address_d = address.gpudata
 
+    #TODO Fine tune this memalloc size
+    voxels_d = cuda.mem_alloc(nslices * max_voxels * voxels_dt.itemsize)
+    slices_start_c_d = cuda.mem_alloc((nslices+1) * 4)
+
     create_voxels = cudaf.get_function('create_voxels')
     create_voxels(voxels_nc_d, slices_start_d, xmin_d, xmax_d,
                   ymin_d, ymax_d, charges_d, xsize, ysize, rmax,
@@ -213,6 +217,12 @@ def create_voxels(cudaf, xmin_d, xmax_d, ymin_d, ymax_d, charges_d,
     address.shape = (nvoxels,)
     scan(address)
 
-#    pdb.set_trace()
+    compact_voxels = cudaf.get_function('compact_voxels')
+    compact_voxels(voxels_nc_d, voxels_d, address_d, active_d,
+                   slices_start_d, slices_start_c_d,
+                  block=(1024, 1, 1), grid=(nslices, 1))
+    voxels_c_h = cuda.from_device(voxels_d, (nvoxels,), voxels_dt)
+    slices_start_c_h = cuda.from_device(slices_start_c_d, (nslices+1,), np.dtype('i4'))
+    pdb.set_trace()
 
     return 0

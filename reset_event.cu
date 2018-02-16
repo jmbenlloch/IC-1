@@ -34,7 +34,7 @@ __global__ void create_voxels(voxel * voxels,
 	int offset = slice_start[blockIdx.x];
 	float charge = charges[blockIdx.x];
 	if(threadIdx.x == 0){
-		printf("[%d][%d]: start: %d\n", blockIdx.x, threadIdx.x, offset);
+//		printf("[%d][%d]: start: %d\n", blockIdx.x, threadIdx.x, offset);
 	}
 
 	int xmin = xmins[blockIdx.x];
@@ -66,5 +66,38 @@ __global__ void create_voxels(voxel * voxels,
 			address[offset + vid] = active;
 		}
 	}
-
 }
+
+
+// Launch block < xdim, 1, 1>, grid <1,1>
+__global__ void compact_voxels(voxel * voxels_nc, voxel * voxels,
+		int * address, bool * actives, int * slice_start_nc, int * slice_start){
+	int start = slice_start_nc[blockIdx.x];
+	int end   = slice_start_nc[blockIdx.x+1];
+	int steps = end - start;
+	int iterations = ceilf(1.f*steps/blockDim.x);
+	if(threadIdx.x == 0){
+		printf("[%d], start %d, end %d, steps %d, iterations: %d\n", blockDim.x, start, end, steps, iterations);
+		slice_start[blockIdx.x] = address[start] - 1;
+		if (blockIdx.x == 0){
+			int lastSlice = slice_start_nc[gridDim.x]-1;
+			slice_start[gridDim.x] = address[lastSlice];
+		}
+	}
+
+	// Compact vector
+	for(int i=0; i<iterations; i++){
+		int vidx = threadIdx.x + i*blockDim.x;
+		int offset = start + vidx;
+		if(offset < end && actives[offset]){
+			voxel * v_out = voxels + address[offset] - 1;
+			voxel * v_in  = voxels_nc + offset;
+//			printf("[%d]: offset %d, out %d\n", blockIdx.x, offset, address[offset]);
+			v_out->x = v_in->x;
+			v_out->y = v_in->y;
+			v_out->E = v_in->E;
+		}   
+	}   
+}
+
+
