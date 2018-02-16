@@ -77,7 +77,7 @@ __global__ void compact_voxels(voxel * voxels_nc, voxel * voxels,
 	int steps = end - start;
 	int iterations = ceilf(1.f*steps/blockDim.x);
 	if(threadIdx.x == 0){
-		printf("[%d], start %d, end %d, steps %d, iterations: %d\n", blockDim.x, start, end, steps, iterations);
+//		printf("[%d], start %d, end %d, steps %d, iterations: %d\n", blockDim.x, start, end, steps, iterations);
 		slice_start[blockIdx.x] = address[start] - 1;
 		if (blockIdx.x == 0){
 			int lastSlice = slice_start_nc[gridDim.x]-1;
@@ -100,4 +100,24 @@ __global__ void compact_voxels(voxel * voxels_nc, voxel * voxels,
 	}   
 }
 
+// Launch grid <nslices, 1>, block <1024, 1, 1>
+__global__ void create_anode_response(float * anode_response, int nsensors,
+		int * sensors_ids, float * charges, int * slices_start){
+	int start = slices_start[blockIdx.x];
+	int end   = slices_start[blockIdx.x+1];
+	int steps = end - start;
+	int offset = nsensors * blockIdx.x;
+	int iterations = ceilf(1.f*steps/blockDim.x);
+//	printf("[%d]: iterations=%d, start=%d, end=%d, steps=%d, offset=%d\n", blockIdx.x, iterations, start, end, steps, offset);
+
+	for(int i=0; i<iterations; i++){
+		int step = threadIdx.x + i*blockDim.x;
+		int sidx = start + step;
+		if (step < steps){
+			int sensor_pos = offset + sensors_ids[sidx];
+//			printf("[%d]: iterations=%d, sidx=%d, sid=%d, charge=%f, pos=%d\n", blockIdx.x, iterations, sidx, sensors_ids[sidx], charges[sidx], sensor_pos);
+			anode_response[sensor_pos] = charges[sidx];
+		}
+	}
+}
 

@@ -11,6 +11,8 @@ import reset_functions_event as rstf
 import invisible_cities.database.load_db as dbf
 from operator import itemgetter
 
+import pdb
+
 import time
 
 # Initialize RESET
@@ -121,17 +123,27 @@ for no in valid_peaks:
     s2, s2si = rebin_s2si(s2, s2si, slice_width)
 
     voxels_data = []
+    sensors_ids = []
+    charges = []
+    slices_start_charges = []
     for tbin, e in enumerate(s2[1]):
         slice_ = pmapsfc.sipm_ids_and_charges_in_slice(s2si, tbin)
         z = (np.average(s2[0][tbin], weights=s2[1][tbin]) - t0)/1000.
-        sensor_ids = slice_[0].astype('i4')
-        charges = np.array(slice_[1]*ZCorr(z).value, dtype='f4')
+        charge = np.array(slice_[1]*ZCorr(z).value, dtype='f4')
         s2e = e * ZCorr(z).value
-
-        selC = (charges > sipm_thr)
+        selC = (charge > sipm_thr)
         if selC.any():
-            voxels_data.append(create_voxels(data_sipm, slice_[0][selC], charges, dist))
+            voxels_data.append(create_voxels(data_sipm, slice_[0][selC], charge, dist))
+            sensors_ids.append(slice_[0])
+            charges.append(charge)
+            slices_start_charges.append(charge.shape[0])
 
+    sensors_ids = np.concatenate(sensors_ids).astype('i4')
+    charges     = np.concatenate(charges)    .astype('f4')
+    #cumsum of slices start to get addresses
+    slices_start_charges = np.array(slices_start_charges).cumsum()
+    #Shift all elements one position to use them as indexes for mem
+    slices_start_charges = np.concatenate(([0], slices_start_charges)).astype('i4')
 
     xmin   = np.array(list(map(itemgetter(0), voxels_data)), dtype='f4')
     xmax   = np.array(list(map(itemgetter(1), voxels_data)), dtype='f4')
@@ -148,7 +160,8 @@ for no in valid_peaks:
     slices_start = np.concatenate(([0], slices_start)).astype('i4')
 
     #reset.run(sensor_ids, charges, s2e, iterations)
-    reset.run(xmin, xmax, ymin, ymax, charge, slices_start, iterations)
+    reset.run(xmin, xmax, ymin, ymax, charge, slices_start, iterations,
+              sensors_ids, charges, slices_start_charges)
 
 reset._destroy_context()
 
