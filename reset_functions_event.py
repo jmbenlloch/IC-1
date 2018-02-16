@@ -176,7 +176,8 @@ class RESET:
 
     #def run(self, sensor_ids, charges, energy, iterations):
     def run(self, xmin, xmax, ymin, ymax, charges_avg, slices_start,
-            iterations, sensors_ids, charges, slices_start_charges):
+            iterations, sensors_ids, charges, slices_start_charges,
+            energies):
         self.nslices = int(xmin.shape[0])
         print("nslices: ", self.nslices)
         xmin_d    = cuda.to_device(xmin)
@@ -195,10 +196,12 @@ class RESET:
                       self.rmax, self.max_voxels, self.nslices,
                       slices_start_d, int(slices_start[-1]), slices_start)
 
-        create_anode_response(self.cudaf, self.nsipms, self.nslices,
+        anode_d = create_anode_response(self.cudaf, self.nsipms, self.nslices,
                               sensors_ids_d, charges_d,
                               np.int32(charges.shape[0]),
                               slices_start_charges_d)
+
+        cath_d = create_cath_response(self.npmts, self.nslices, energies)
 
 
 def create_voxels(cudaf, xmin_d, xmax_d, ymin_d, ymax_d, charges_d,
@@ -262,3 +265,11 @@ def create_anode_response(cudaf, nsensors, nslices, sensors_ids_d,
         assert anode_response_h[idx] == charges_h[i]
 
     return anode_response_h
+
+
+# TODO: Generalize for npmts > 1
+def create_cath_response(npmts, nslices, energies):
+    cath_response_d = cuda.to_device(energies)
+
+
+

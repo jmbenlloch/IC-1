@@ -126,6 +126,7 @@ for no in valid_peaks:
     sensors_ids = []
     charges = []
     slices_start_charges = []
+    s2es = []
     for tbin, e in enumerate(s2[1]):
         slice_ = pmapsfc.sipm_ids_and_charges_in_slice(s2si, tbin)
         z = (np.average(s2[0][tbin], weights=s2[1][tbin]) - t0)/1000.
@@ -137,9 +138,11 @@ for no in valid_peaks:
             sensors_ids.append(slice_[0])
             charges.append(charge)
             slices_start_charges.append(charge.shape[0])
+            s2es.append(s2e)
 
     sensors_ids = np.concatenate(sensors_ids).astype('i4')
     charges     = np.concatenate(charges)    .astype('f4')
+    s2es        = np.array(s2es).astype('f4')
     #cumsum of slices start to get addresses
     slices_start_charges = np.array(slices_start_charges).cumsum()
     #Shift all elements one position to use them as indexes for mem
@@ -161,7 +164,7 @@ for no in valid_peaks:
 
     #reset.run(sensor_ids, charges, s2e, iterations)
     reset.run(xmin, xmax, ymin, ymax, charge, slices_start, iterations,
-              sensors_ids, charges, slices_start_charges)
+              sensors_ids, charges, slices_start_charges, s2es)
 
 reset._destroy_context()
 
