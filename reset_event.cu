@@ -121,3 +121,43 @@ __global__ void create_anode_response(float * anode_response, int nsensors,
 	}
 }
 
+
+// Launch block <1024,1,1>, grid < ceil(nvoxels/1024), 1>
+__global__ void compute_active_sensors(float * probs, bool * active, int * address,
+		int nvoxels, int nsensors, int sensors_per_voxel, voxel * voxels, float sensor_dist, 
+		float * xs, float * ys, float step, int nbins, float xmin, float ymin,
+	   	correction * corrections){
+	int vidx = blockIdx.x * blockDim.x + threadIdx.x;
+	//printf("[%d][%d] id: %d, nsensors: %d\n", blockIdx.x, threadIdx.x, vidx, nsensors);
+
+	int base_idx = vidx * sensors_per_voxel;
+	int active_count = 0;
+
+	//Check bounds
+	if(vidx < nvoxels){
+		for(int sidx=0; sidx<nsensors; sidx++){
+			int idx = base_idx + active_count;
+			float xdist = voxels[vidx].x - xs[sidx];
+			float ydist = voxels[vidx].y - ys[sidx];
+
+			bool voxel_sensor = ((abs(xdist) <= sensor_dist) &&
+					(abs(ydist) <= sensor_dist));
+			active_count += voxel_sensor;
+
+			//Compute index
+			active[idx]  = voxel_sensor;
+			address[idx] = voxel_sensor;
+
+			// Compute probability
+			// In order to avoid accesing wrong parts of the memory 
+			// if the sensor is not active for a particular voxel,
+			// then we will use index 0.
+			// Rounding: plus 0.5 and round down
+			int xindex = __float2int_rd((xdist - xmin) / step * voxel_sensor + 0.5f);
+			int yindex = __float2int_rd((ydist - ymin) / step * voxel_sensor + 0.5f);
+			int prob_idx = xindex * nbins + yindex;
+
+			probs[idx] = corrections[prob_idx].factor;
+		}
+	}
+}

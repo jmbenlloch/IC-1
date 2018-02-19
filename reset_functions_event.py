@@ -191,9 +191,9 @@ class RESET:
         charges_d = cuda.to_device(charges)
         slices_start_charges_d = cuda.to_device(slices_start_charges)
 
-        voxels_d, slices_start_d = create_voxels(self.cudaf, xmin_d, xmax_d,
-                      ymin_d, ymax_d, charges_avg_d, self.xsize, self.ysize,
-                      self.rmax, self.max_voxels, self.nslices,
+        nvoxels, voxels_d, slices_start_d = create_voxels(self.cudaf, xmin_d,
+                      xmax_d, ymin_d, ymax_d, charges_avg_d, self.xsize,
+                      self.ysize, self.rmax, self.max_voxels, self.nslices,
                       slices_start_d, int(slices_start[-1]), slices_start)
 
         anode_d = create_anode_response(self.cudaf, self.nsipms, self.nslices,
@@ -202,6 +202,11 @@ class RESET:
                               slices_start_charges_d)
 
         cath_d = create_cath_response(self.npmts, self.nslices, energies)
+
+        sipms_per_voxel = int(math.floor(2 * self.sipm_dist / self.pitch) + 1)**2
+        compute_active_sensors(self.cudaf, self.nslices, nvoxels, self.nsipms,
+                               sipms_per_voxel, voxels_d, self.sipm_dist, self.xs_sipms_d,
+                               self.ys_sipms_d, self.sipm_param, self.sipms_corr_d)
 
 
 def create_voxels(cudaf, xmin_d, xmax_d, ymin_d, ymax_d, charges_d,
@@ -236,8 +241,9 @@ def create_voxels(cudaf, xmin_d, xmax_d, ymin_d, ymax_d, charges_d,
                   block=(1024, 1, 1), grid=(nslices, 1))
     voxels_c_h = cuda.from_device(voxels_d, (nvoxels,), voxels_dt)
     slices_start_c_h = cuda.from_device(slices_start_c_d, (nslices+1,), np.dtype('i4'))
+    nvoxels_compact = int(slices_start_c_h[-1])
 
-    return voxels_d, slices_start_c_d
+    return nvoxels_compact, voxels_d, slices_start_c_d
 
 def create_anode_response(cudaf, nsensors, nslices, sensors_ids_d,
                           charges_d, ncharges, slices_start_charges_d):
@@ -272,4 +278,27 @@ def create_cath_response(npmts, nslices, energies):
     cath_response_d = cuda.to_device(energies)
 
 
+def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
+                           voxels_d, sensor_dist, xs_d, ys_d, sensor_param, params_d):
+    voxel_probs_d         = cuda.mem_alloc(nvoxels * sensors_per_voxel * 4)
+    active_voxel_probs_d  = cuda.mem_alloc(nvoxels * sensors_per_voxel)
+    address_voxel_probs   = pycuda.gpuarray.empty(nvoxels * sensors_per_voxel, np.dtype('i4'))
+    address_voxel_probs_d = address_voxel_probs.gpudata
 
+    sensor_probs_d         = cuda.mem_alloc(nvoxels * sensors_per_voxel * 4)
+    active_sensor_probs_d  = cuda.mem_alloc(nvoxels * sensors_per_voxel)
+    address_sensor_probs   = pycuda.gpuarray.empty(nvoxels * sensors_per_voxel, np.dtype('i4'))
+    address_sensor_probs_d = address_voxel_probs.gpudata
+    print("nvoxels: ", nvoxels)
+
+    voxels_per_block = 1024
+    blocks = math.ceil(nvoxels / voxels_per_block)
+    print("blocks: ", blocks)
+
+    compute_active = cudaf.get_function('compute_active_sensors')
+    compute_active(voxel_probs_d, active_voxel_probs_d, address_voxel_probs_d,
+                   np.int32(nvoxels), nsensors, np.int32(sensors_per_voxel), voxels_d,
+                   sensor_dist, xs_d, ys_d, sensor_param.step, sensor_param.nbins,
+                   sensor_param.xmin, sensor_param.ymin, params_d,
+                   block=(voxels_per_block, 1, 1), grid=(blocks, 1))
+                   #block=(voxels_per_block, 1, 1), grid=(1, 1))
