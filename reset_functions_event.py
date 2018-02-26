@@ -206,7 +206,7 @@ class RESET:
         sipms_per_voxel = int(math.floor(2 * self.sipm_dist / self.pitch) + 1)**2
         compute_active_sensors(self.cudaf, self.nslices, nvoxels, self.nsipms,
                                sipms_per_voxel, voxels_d, self.sipm_dist, self.xs_sipms_d,
-                               self.ys_sipms_d, self.sipm_param, self.sipms_corr_d)
+                               self.ys_sipms_d, self.sipm_param, self.sipms_corr_d, slices_start_d)
 
 
 def create_voxels(cudaf, xmin_d, xmax_d, ymin_d, ymax_d, charges_d,
@@ -279,15 +279,26 @@ def create_cath_response(npmts, nslices, energies):
 
 
 def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
-                           voxels_d, sensor_dist, xs_d, ys_d, sensor_param, params_d):
-    voxel_probs_d         = cuda.mem_alloc(nvoxels * sensors_per_voxel * 4)
-    active_voxel_probs_d  = cuda.mem_alloc(nvoxels * sensors_per_voxel)
-    address_voxel_probs   = pycuda.gpuarray.empty(nvoxels * sensors_per_voxel, np.dtype('i4'))
-    address_voxel_probs_d = address_voxel_probs.gpudata
+                           voxels_d, sensor_dist, xs_d, ys_d, sensor_param, params_d, slices_start_d):
+    probs_size = int(nvoxels * sensors_per_voxel)
+    voxel_probs_d         = cuda.mem_alloc(probs_size * 4)
+    active_voxel_probs_d  = cuda.mem_alloc(probs_size)
+    sensors_ids_d         = cuda.mem_alloc(probs_size * 4)
 
-    sensor_probs_d         = cuda.mem_alloc(nvoxels * sensors_per_voxel * 4)
-    active_sensor_probs_d  = cuda.mem_alloc(nvoxels * sensors_per_voxel)
-    address_sensor_probs   = pycuda.gpuarray.empty(nvoxels * sensors_per_voxel, np.dtype('i4'))
+    voxel_probs_compact_d = cuda.mem_alloc(probs_size * 4)
+    sensors_ids_compact_d = cuda.mem_alloc(probs_size * 4)
+
+    # One last element for compact later
+    address_voxel_probs   = pycuda.gpuarray.empty(probs_size+1, np.dtype('i4'))
+    address_voxel_probs_d = address_voxel_probs.gpudata
+    #TEST
+    cuda.memset_d32(voxel_probs_d, 0, probs_size)
+    voxel_probs_h = cuda.from_device(voxel_probs_d, (probs_size,), np.dtype('f4'))
+#    pdb.set_trace()
+
+    sensor_probs_d         = cuda.mem_alloc(probs_size * 4)
+    active_sensor_probs_d  = cuda.mem_alloc(probs_size)
+    address_sensor_probs   = pycuda.gpuarray.empty(probs_size, np.dtype('i4'))
     address_sensor_probs_d = address_voxel_probs.gpudata
     print("nvoxels: ", nvoxels)
 
@@ -296,9 +307,50 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
     print("blocks: ", blocks)
 
     compute_active = cudaf.get_function('compute_active_sensors')
-    compute_active(voxel_probs_d, active_voxel_probs_d, address_voxel_probs_d,
+    compute_active(voxel_probs_d, active_voxel_probs_d, address_voxel_probs_d, sensors_ids_d,
                    np.int32(nvoxels), nsensors, np.int32(sensors_per_voxel), voxels_d,
                    sensor_dist, xs_d, ys_d, sensor_param.step, sensor_param.nbins,
                    sensor_param.xmin, sensor_param.ymin, params_d,
                    block=(voxels_per_block, 1, 1), grid=(blocks, 1))
                    #block=(voxels_per_block, 1, 1), grid=(1, 1))
+                   #block=(2, 1, 1), grid=(1, 1))
+
+    voxel_probs_h = cuda.from_device(voxel_probs_d, (probs_size,), np.dtype('f4'))
+    active_voxel_probs_h = cuda.from_device(active_voxel_probs_d, (probs_size,), np.dtype('i1'))
+    sensor_ids_h = cuda.from_device(sensors_ids_d, (probs_size,), np.dtype('i4'))
+    slices_start_h = cuda.from_device(slices_start_d, (nslices+1,), np.dtype('i4'))
+
+    scan = InclusiveScanKernel(np.int32, "a+b")
+    scan(address_voxel_probs)
+
+    #slices_start
+    slices_start_probs_d = cuda.mem_alloc((nslices+1) * 4)
+    compact_slices = cudaf.get_function('compact_slices')
+    compact_slices(slices_start_probs_d, slices_start_d,
+                   address_voxel_probs_d, np.int32(sensors_per_voxel),
+                   block=(nslices+1, 1, 1), grid=(1, 1))
+
+    slices_compact_h = cuda.from_device(slices_start_probs_d, (nslices+1,), np.dtype('i4'))
+
+    compact_probs = cudaf.get_function('compact_probs')
+    compact_probs(voxel_probs_d, voxel_probs_compact_d, sensors_ids_d,
+                  sensors_ids_compact_d, address_voxel_probs_d,
+                  active_voxel_probs_d, np.int32(probs_size),
+                  block=(1024, 1, 1), grid=(100, 1))
+
+
+    voxel_probs_c_h = cuda.from_device(voxel_probs_compact_d, (probs_size,), np.dtype('f4'))
+    sensor_ids_c_h  = cuda.from_device(sensors_ids_compact_d, (probs_size,), np.dtype('i4'))
+
+
+#    addrs = address_voxel_probs.get()
+#    for i in range(len(voxel_probs_h)):
+#        print(i)
+#        if active_voxel_probs_h[i]:
+#            addr = addrs[i]-1
+#            print (voxel_probs_h[i], voxel_probs_c_h[addr])
+#            assert voxel_probs_h[i] == voxel_probs_c_h[addr]
+#            assert  sensor_ids_h[i] ==  sensor_ids_c_h[addr]
+
+
+#    pdb.set_trace()

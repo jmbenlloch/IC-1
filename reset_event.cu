@@ -33,9 +33,9 @@ __global__ void create_voxels(voxel * voxels,
 
 	int offset = slice_start[blockIdx.x];
 	float charge = charges[blockIdx.x];
-	if(threadIdx.x == 0){
+//	if(threadIdx.x == 0){
 //		printf("[%d][%d]: start: %d\n", blockIdx.x, threadIdx.x, offset);
-	}
+//	}
 
 	int xmin = xmins[blockIdx.x];
 	int xmax = xmaxs[blockIdx.x];
@@ -121,9 +121,8 @@ __global__ void create_anode_response(float * anode_response, int nsensors,
 	}
 }
 
-
 // Launch block <1024,1,1>, grid < ceil(nvoxels/1024), 1>
-__global__ void compute_active_sensors(float * probs, bool * active, int * address,
+__global__ void compute_active_sensors(float * probs, bool * active, int * address, int * sensor_ids,
 		int nvoxels, int nsensors, int sensors_per_voxel, voxel * voxels, float sensor_dist, 
 		float * xs, float * ys, float step, int nbins, float xmin, float ymin,
 	   	correction * corrections){
@@ -157,7 +156,52 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 			int yindex = __float2int_rd((ydist - ymin) / step * voxel_sensor + 0.5f);
 			int prob_idx = xindex * nbins + yindex;
 
-			probs[idx] = corrections[prob_idx].factor;
+//			if(blockIdx.x == 0 && threadIdx.x <= 1){
+//				printf("[%d-%d] idx: %d, sidx: %d, active: %d, count: %d\n", blockIdx.x, threadIdx.x, idx, sidx, voxel_sensor, active_count);
+//			}
+
+			//Avoid extra read/write
+			if(voxel_sensor){
+				probs[idx] = corrections[prob_idx].factor;
+				sensor_ids[idx] = sidx;
+			}
+
+			// Stop if all relevant sensors for current voxel has been found
+			if(active_count >= sensors_per_voxel){
+				break;
+			}
+		}
+	}
+}
+
+// Launch grid<1,1> block <nvoxels+1, 1, 1>
+__global__ void compact_slices(int * slice_start,
+	   int * slice_start_nc, int * address, int sensors_per_voxel){
+	int idx = slice_start_nc[threadIdx.x] * sensors_per_voxel;
+	slice_start[threadIdx.x] = address[idx] - 1;
+}
+
+__global__ void compact_probs(float * probs_in, float * probs_out, 
+		int * ids_in, int * ids_out, int * address,
+	   	bool * actives, int size){
+
+	int iterations = ceilf(1.f*size / (blockDim.x*gridDim.x));
+	int grid_base = blockIdx.x * blockDim.x * iterations;
+
+	for(int i=0; i<iterations; i++){
+		int block_base = i * blockDim.x;
+		int offset = grid_base + block_base + threadIdx.x;
+		if(offset < size){
+			int addr = address[offset] - 1;  
+
+//			if(threadIdx.x == 0 && blockIdx.x == 0){
+//				printf("[%d, %d] iter: %d, offset %d, addr: %d\n", blockIdx.x, threadIdx.x, i, offset, addr);
+//			}
+
+			if(actives[offset]){
+				probs_out[addr] = probs_in[offset];
+				ids_out[addr]   = ids_in[offset];
+			}
 		}
 	}
 }

@@ -109,7 +109,8 @@ for no in valid_peaks:
         #if tbin != 2:
 #        if tbin != 7:
 #        if tbin != 0:
-#            continue
+        if tbin != 1:
+            continue
         print ("\n\nTime bin: {}".format(tbin))
 
         tstart = time.time()
