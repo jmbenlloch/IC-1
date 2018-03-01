@@ -487,7 +487,7 @@ def compute_active_sensors(cudaf, reset, scan_mem, num_voxels, voxels_d, nsensor
     probs_compact_h = cuda.from_device(probs_compact_d, (probs_size,), np.dtype('f4'))
     sensor_ids_h    = cuda.from_device(sensor_ids_d, (probs_size,), np.dtype('i4'))
     voxel_start_h   = cuda.from_device(voxel_start_d, (num_voxels+1,), np.dtype('i4'))
-    pdb.set_trace()
+#    pdb.set_trace()
 
     # Check compact is correct
 #    for s in range(voxel_start_h.shape[0]-1):
