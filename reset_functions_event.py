@@ -307,6 +307,8 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
 
     voxel_probs_compact_d = cuda.mem_alloc(probs_size * 4)
     sensors_ids_compact_d = cuda.mem_alloc(probs_size * 4)
+    voxel_starts   = pycuda.gpuarray.zeros(int(nvoxels + 1), np.dtype('i4'))
+    voxel_starts_d = voxel_starts.gpudata
 
     # One last element for compact later
     address_voxel_probs   = pycuda.gpuarray.empty(probs_size+1, np.dtype('i4'))
@@ -338,7 +340,7 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
 
     compute_active = cudaf.get_function('compute_active_sensors')
     compute_active(voxel_probs_d, active_voxel_probs_d, address_voxel_probs_d, sensors_ids_d,
-                   slice_ids_d, sensor_starts_d,
+                   slice_ids_d, sensor_starts_d, voxel_starts_d,
                    np.int32(nvoxels), nsensors, np.int32(sensors_per_voxel), voxels_d,
                    sensor_dist, xs_d, ys_d, sensor_param.step, sensor_param.nbins,
                    sensor_param.xmin, sensor_param.ymin, params_d,
@@ -355,6 +357,7 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
     scan(address_voxel_probs)
     sensor_starts_h = sensor_starts.get()
     scan(sensor_starts)
+    scan(voxel_starts)
 
     #slices_start
     slices_start_probs_d = cuda.mem_alloc((nslices+1) * 4)
@@ -398,13 +401,40 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
     voxel_ids_h = cuda.from_device(voxel_ids_d, (sensor_probs_size,), np.dtype('i4'))
 
     #check transpose
-    for i in range(len(slices_compact_h)-1):
-        start = slices_compact_h[i]
-        end   = slices_compact_h[i+1]
+#    for i in range(len(slices_compact_h)-1):
+#        start = slices_compact_h[i]
+#        end   = slices_compact_h[i+1]
         #print("slice: ", i, sensor_probs_h[start:end].sum(), voxel_probs_c_h[start:end].sum())
-        print("slice: ", i, sensor_probs_h[start:end].sum() - voxel_probs_c_h[start:end].sum())
+#        print("slice: ", i, sensor_probs_h[start:end].sum() - voxel_probs_c_h[start:end].sum())
         #assert np.allclose(sensor_probs_h[start:end].sum(), voxel_probs_c_h[start:end].sum())
 
+    # TODO Missing voxels start
+    total_size = sensor_starts.get()[-1]
+    sensors_start = sensor_starts.get()
+    voxels_start  = voxel_starts.get()
+    slice_id = 0
+    voxel_id = 0
+    for i in range(total_size):
+        if i >= slices_compact_h[slice_id + 1]:
+            slice_id = slice_id + 1
+#            print(slice_id, i)
+        if i >= voxels_start[voxel_id + 1]:
+            voxel_id = voxel_id + 1
+            print(voxel_id, i)
+        voxel_sensor_p  = voxel_probs_c_h[i]
+        voxel_sensor_id = sensor_ids_c_h[i]
+        assert i == i
+
+        sensor_start = sensors_start[slice_id * nsensors + voxel_sensor_id]
+        sensor_end   = sensors_start[slice_id * nsensors + voxel_sensor_id + 1]
+        for j in range(sensor_start, sensor_end):
+            if voxel_ids_h[j] == voxel_id:
+                try:
+                    assert sensor_probs_h[j] == voxel_sensor_p
+                except AssertionError:
+                    print("{} sid {}, vid {}, p1 {}, p2 {}".format(i, voxel_sensor_id, voxel_id, voxel_sensor_p, sensor_probs_h[j]))
+#        if voxel_id > 1000:
+#            break
 
 
 #    addrs = address_voxel_probs.get()

@@ -148,7 +148,7 @@ __device__ void get_probability(float * prob, bool * active, voxel * voxels,
 
 // Launch block <1024,1,1>, grid < ceil(nvoxels/1024), 1>
 __global__ void compute_active_sensors(float * probs, bool * active, int * address, int * sensor_ids,
-		int * slice_ids, int * last_position,
+		int * slice_ids, int * last_position, int * voxel_start,
 		int nvoxels, int nsensors, int sensors_per_voxel, voxel * voxels, float sensor_dist, 
 		float * xs, float * ys, float step, int nbins, float xmin, float ymin,
 	   	correction * corrections){
@@ -182,9 +182,9 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 				sensor_ids[idx] = sidx;
 				//Increase the next one in order to get addresses after scan
 
-//				if(sidx == 1351 && slice_id == 1){
-//					printf("voxels: [%d, %d] count: %d, slice: %d, sidx: %d, voxel: %d\n", blockIdx.x, threadIdx.x, last_position[nsensors*slice_id + sidx + 1], slice_id, sidx, vidx);
-//				}
+				if(sidx == 1352 && vidx == 2){
+					printf("voxels: [%d, %d] slice: %d, sidx: %d, voxel: %d, prob: %f\n", blockIdx.x, threadIdx.x, slice_id, sidx, vidx, prob);
+				}
 
 				atomicAdd(last_position + nsensors*slice_id + sidx + 1, 1);
 			}
@@ -195,6 +195,7 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 			}
 		}
 	}
+	voxel_start[vidx+1] = active_count;
 }
 
 __global__ void sensor_voxel_probs(float * probs, int * sensor_starts, int * voxel_ids,
@@ -272,6 +273,9 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts, int * vox
 //			if(sid == 1351){
 //				printf("sensor [%d, %d] count: %d, slice: %d, sidx: %d, voxel: %d\n", blockIdx.x, threadIdx.x, count, slice, sid, vidx);
 //			}
+			if(sid == 1352 && vidx == 2){
+				printf("sensor: [%d, %d] slice: %d, sidx: %d, voxel: %d, prob: %f\n", blockIdx.x, threadIdx.x, slice, sid, vidx, prob);
+			}
 
 			count++;
 		}
