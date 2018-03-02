@@ -158,6 +158,9 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 	int base_idx = vidx * sensors_per_voxel;
 	int active_count = 0;
 
+	if(blockIdx.x == 0 && threadIdx.x == 0)
+		printf("nvoxels: %d\n", nvoxels);
+
 	//Check bounds
 	if(vidx < nvoxels){
 		int slice_id = slice_ids[vidx];
@@ -194,16 +197,17 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 				break;
 			}
 		}
-	}
 	voxel_start[vidx+1] = active_count;
+	}
 }
 
-__global__ void sensor_voxel_probs(float * probs, int * sensor_starts, int * voxel_ids,
-	   	int nsensors, int nslices, float * x_sensors, float * y_sensors,
-		voxel * voxels, int * slice_start_nc, int * address_voxels, float sensor_dist,
-		float * xmins, float * xmaxs, float * ymins, float * ymaxs, float xsize, float ysize,
-		float p_xmin, float p_ymin, float step, int nbins, correction * corrections,
-		int * counts){
+__global__ void sensor_voxel_probs(float * probs, int * sensor_starts, 
+		int * voxel_ids, int nsensors, int nslices, float * x_sensors,
+	   	float * y_sensors, voxel * voxels, int * slice_start_nc,
+	   	int * address_voxels, float sensor_dist, float * xmins, 
+		float * xmaxs, float * ymins, float * ymaxs, float xsize, 
+		float ysize, float p_xmin, float p_ymin, float step, int nbins,
+	   	correction * corrections, int * counts){
 
 	//Compute sensor id and slice id
 	int sid, slice;
@@ -292,8 +296,9 @@ __global__ void compact_slices(int * slice_start,
 }
 
 __global__ void compact_probs(float * probs_in, float * probs_out, 
-		int * ids_in, int * ids_out, int * address,
-	   	bool * actives, int size){
+		float * forward_num, int * ids_in, int * ids_out, int * slice_ids,
+	   	int * address, bool * actives, int size,
+		int nsensors, int sensors_per_voxel, float * sensors_response){
 
 	int iterations = ceilf(1.f*size / (blockDim.x*gridDim.x));
 	int grid_base = blockIdx.x * blockDim.x * iterations;
@@ -309,8 +314,14 @@ __global__ void compact_probs(float * probs_in, float * probs_out,
 //			}
 
 			if(actives[offset]){
-				probs_out[addr] = probs_in[offset];
-				ids_out[addr]   = ids_in[offset];
+				float prob = probs_in[offset];
+				int sensor_id = ids_in[offset];
+				int slice_id  = slice_ids[i / sensors_per_voxel];
+				probs_out[addr] = prob;
+				ids_out[addr]   = sensor_id;
+				
+				float response = sensors_response[slice_id * nsensors + sensor_id];
+				forward_num[addr] = response * prob;
 			}
 		}
 	}
