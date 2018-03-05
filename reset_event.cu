@@ -42,8 +42,9 @@ __global__ void create_voxels(voxel * voxels,
 	int xmax = xmaxs[blockIdx.x];
 	int ymin = ymins[blockIdx.x];
 	int ymax = ymaxs[blockIdx.x];
-	int xsteps = (xmax - xmin) / xsize;
-	int ysteps = (ymax - ymin) / ysize;
+	// +1 to include last column/row
+	int xsteps = (xmax - xmin) / xsize + 1;
+	int ysteps = (ymax - ymin) / ysize + 1;
 
 	int iterations = ceilf(1.f*(xsteps*ysteps)/blockDim.x);
 //	printf("iterations: %d\n", iterations);
@@ -53,8 +54,7 @@ __global__ void create_voxels(voxel * voxels,
 		float x = xmin + (vid / ysteps) * xsize;
 		float y = ymin + (vid % ysteps) * xsize;
 
-		//TODO Check boundary condition
-		if(x < xmax && y < ymax){
+		if(x <= xmax && y <= ymax){
 			bool active = sqrtf(x*x + y*y) < rmax;
 			voxel * v = voxels + offset + vid;
 //			printf("[%d][%d][%d]: offset %d, vid %d\n", blockIdx.x, threadIdx.x, i, offset, vid);
@@ -226,8 +226,8 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 	}
 
 	//Compute limits to iterate over voxels
-	int xsteps = (xmaxs[slice] - xmins[slice]) / xsize;
-	int ysteps = (ymaxs[slice] - ymins[slice]) / ysize;
+	int xsteps = (xmaxs[slice] - xmins[slice]) / xsize + 1;
+	int ysteps = (ymaxs[slice] - ymins[slice]) / ysize + 1;
 //	printf("xsteps: %d, ysteps: %d\n", xsteps, ysteps);
 
 	int xstart = (x_sensors[sid] - sensor_dist - xmins[slice]) / xsize;
@@ -235,24 +235,38 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 	int ystart = (y_sensors[sid] - sensor_dist - ymins[slice]) / ysize;
 	int yend   = (y_sensors[sid] + sensor_dist - ymins[slice]) / ysize;
 
+	if(blockIdx.x == 263 && threadIdx.x == 38){
+		printf("xs: %f, ys: %f, dist: %f, xmin: %f, ymin: %f, xsize: %f, ysize: %f\n", x_sensors[sid], y_sensors[sid], sensor_dist, xmins[slice], ymins[slice], xsize, ysize);
+		printf("x: (%d, %d), y: (%d, %d), steps: (%d, %d)\n", xstart, xend, ystart, yend, xsteps, ysteps);
+	}
+
 	//Correct limit if we are past the borders
 	if(xstart < 0){
 		xstart = 0;
 	}
-	if(xend > xsteps){
-		xend = xsteps;
+	if(xend >= xsteps){
+		xend = xsteps - 1;
 	}
 	if(ystart < 0){
 		ystart = 0;
 	}
-	if(yend > ysteps){
-		yend = ysteps;
+	if(yend >= ysteps){
+		yend = ysteps - 1;
+	}
+
+	if(blockIdx.x == 263 && threadIdx.x == 38){
+		printf("x: (%d, %d), y: (%d, %d), steps: (%d, %d)\n", xstart, xend, ystart, yend, xsteps, ysteps);
 	}
 
 	//Compute actual addresses
 	int offset = slice_start_nc[slice];
 	int start = offset + xstart * ysteps + ystart;
 	int end   = offset + xend   * ysteps + yend;
+	if(blockIdx.x == 263 && threadIdx.x == 38){
+		printf("sensor [%d, %d] start: %d, end: %d\n", blockIdx.x, threadIdx.x, start, end);
+	}
+
+
 	if(start <= end){
 		start = address_voxels[start] - 1;
 		end   = address_voxels[end] - 1;
@@ -268,6 +282,11 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 		get_probability(&prob, &voxel_sensor, voxels, vidx, sid, 
 				x_sensors, y_sensors, sensor_dist, 
 				p_xmin, p_ymin, step, nbins, corrections);
+
+			if(blockIdx.x == 263 && threadIdx.x == 38){
+				printf("sensor [%d, %d] count: %d, slice: %d, sidx: %d, voxel: %d\n", blockIdx.x, threadIdx.x, count, slice, sid, vidx);
+				printf("sensor [%d, %d] start: %d, end: %d\n", blockIdx.x, threadIdx.x, start, end);
+			}
 
 		if(voxel_sensor){
 			int pos = start_pos + count;

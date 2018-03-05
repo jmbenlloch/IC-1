@@ -256,8 +256,6 @@ def create_voxels(cudaf, xmin_d, xmax_d, ymin_d, ymax_d, charges_d,
     ymin_h = cuda.from_device(ymin_d, (nslices,), np.dtype('f4'))
     ymax_h = cuda.from_device(ymax_d, (nslices,), np.dtype('f4'))
 
-#    pdb.set_trace()
-
     return nvoxels_compact, voxels_d, slice_ids_d, slices_start_c_d, address
 
 def create_anode_response(cudaf, nsensors, nslices, sensors_ids_d,
@@ -370,6 +368,7 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
                    block=(nslices+1, 1, 1), grid=(1, 1))
 
     slices_compact_h = cuda.from_device(slices_start_probs_d, (nslices+1,), np.dtype('i4'))
+    slices_start_nc_h = cuda.from_device(slices_start_nc_d, (nslices+1,), np.dtype('i4'))
 
     compact_probs = cudaf.get_function('compact_probs')
     compact_probs(voxel_probs_d, voxel_probs_compact_d, forward_num_d, sensors_ids_d,
@@ -403,31 +402,38 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
     sensor_probs_h = cuda.from_device(sensor_probs_d, (sensor_probs_size,), np.dtype('f4'))
     voxel_ids_h = cuda.from_device(voxel_ids_d, (sensor_probs_size,), np.dtype('i4'))
 
-    #check transpose
-#    total_size = sensor_starts.get()[-1]
-#    sensors_start = sensor_starts.get()
-#    voxels_start  = voxel_starts.get()
-#    slice_id = 0
-#    voxel_id = 0
-#    for i in range(total_size):
-#        if i >= slices_compact_h[slice_id + 1]:
-#            slice_id = slice_id + 1
-##            print(slice_id, i)
-#        if i >= voxels_start[voxel_id + 1]:
-#            voxel_id = voxel_id + 1
-#            print(voxel_id, i)
-#        voxel_sensor_p  = voxel_probs_c_h[i]
-#        voxel_sensor_id = sensor_ids_c_h[i]
-#        assert i == i
 
-#        sensor_start = sensors_start[slice_id * nsensors + voxel_sensor_id]
-#        sensor_end   = sensors_start[slice_id * nsensors + voxel_sensor_id + 1]
-#        for j in range(sensor_start, sensor_end):
-#            if voxel_ids_h[j] == voxel_id:
-#                try:
-#                    assert sensor_probs_h[j] == voxel_sensor_p
-#                except AssertionError:
-#                    print("{} sid {}, vid {}, p1 {}, p2 {}".format(i, voxel_sensor_id, voxel_id, voxel_sensor_p, sensor_probs_h[j]))
+    xmins_h  = cuda.from_device(xmins_d, (nslices,), np.dtype('f4'))
+    xmaxs_h  = cuda.from_device(xmaxs_d, (nslices,), np.dtype('f4'))
+    ymins_h  = cuda.from_device(ymins_d, (nslices,), np.dtype('f4'))
+    ymaxs_h  = cuda.from_device(ymaxs_d, (nslices,), np.dtype('f4'))
+
+
+    #check transpose
+    total_size = sensor_starts.get()[-1]
+    sensors_start = sensor_starts.get()
+    voxels_start  = voxel_starts.get()
+    slice_id = 0
+    voxel_id = 0
+    for i in range(total_size):
+        if i >= slices_compact_h[slice_id + 1]:
+            slice_id = slice_id + 1
+#            print(slice_id, i)
+        if i >= voxels_start[voxel_id + 1]:
+            voxel_id = voxel_id + 1
+            print(voxel_id, i)
+        voxel_sensor_p  = voxel_probs_c_h[i]
+        voxel_sensor_id = sensor_ids_c_h[i]
+        assert i == i
+
+        sensor_start = sensors_start[slice_id * nsensors + voxel_sensor_id]
+        sensor_end   = sensors_start[slice_id * nsensors + voxel_sensor_id + 1]
+        for j in range(sensor_start, sensor_end):
+            if voxel_ids_h[j] == voxel_id:
+                try:
+                    assert sensor_probs_h[j] == voxel_sensor_p
+                except AssertionError:
+                    print("{} sid {}, vid {}, p1 {}, p2 {}".format(i, voxel_sensor_id, voxel_id, voxel_sensor_p, sensor_probs_h[j]))
 
 
 #    addrs = address_voxel_probs.get()

@@ -59,7 +59,7 @@ def create_voxels(data_sipm, sensor_ids, charges, dist):
 
 #TODO: check rounding here. Probably we are missing one row/column
 def nvoxels(xmin, xmax, xsize, ymin, ymax, ysize):
-    return (xmax - xmin)/ xsize * (ymax - ymin)/ ysize
+    return ((xmax - xmin)/ xsize + 1) * ((ymax - ymin)/ ysize + 1)
 
 pmap_conf = {}
 pmap_conf['s1_emin'] = 54 * pes
