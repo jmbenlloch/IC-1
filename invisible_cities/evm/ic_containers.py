@@ -41,6 +41,7 @@ for name, attrs in (
         ('PeakData'       , 'charge height width'),
         ('SensorsParams'  , 'xmin ymin step nbins params'),
         ('ProbsCompact'   , 'probs sensor_ids voxel_start sensor_probs voxel_ids sensor_start'),
+        ('ProbsCompact2'  , 'probs sensor_ids voxel_start sensor_probs voxel_ids sensor_start sensor_start_ids'),
         ('Scan'           , 'data active addr'),
         ('ResetProbs'     , 'probs transpose compact'),
         ('Measurement'    , 'value uncertainty')):

@@ -16,61 +16,15 @@ import pdb
 from invisible_cities.evm.ic_containers import SensorsParams
 from invisible_cities.evm.ic_containers import ResetProbs
 from invisible_cities.evm.ic_containers import ProbsCompact
+from invisible_cities.evm.ic_containers import ProbsCompact2
 from invisible_cities.evm.ic_containers import Scan
 
 # Define types
 # due to packing the c struct has 4 bytes for the boolean (maybe pragma pack...)
 voxels_dt      = np.dtype([('x', 'f4'), ('y', 'f4'), ('E', 'f4')])
-#sensors_dt     = np.dtype([('id', 'i4'), ('charge', 'f4'), ('active', 'i4')])
 sensors_dt     = np.dtype([('charge', 'f4')])
 corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
 active_dt      = np.dtype([('id', 'i1')])
-
-segmented_scan_dt = np.dtype([('value', 'f4'), ('flag', 'i4')])
-mlem_scan_dt = np.dtype([('eff', 'f4'), ('projection', 'f4'),('flag', 'i4')])
-pycuda.tools.get_or_register_dtype("scan_t", segmented_scan_dt)
-pycuda.tools.get_or_register_dtype("mlem_scan_t", mlem_scan_dt)
-
-header = '''
-struct scan_t {
-    float value;
-    int active;
-
-     __device__ scan_t& operator=(const scan_t& a){
-        value = a.value;
-        active = a.active;
-        return *this;
-    }
-
-    __device__ scan_t operator+(const scan_t& a) const{
-        scan_t res;
-        res.value = a.value + value * !a.active;
-        res.active = a.active || active;
-        return res;
-    }
-};
-
-struct mlem_scan_t {
-    float eff;
-    float projection;
-    int active;
-
-     __device__ mlem_scan_t& operator=(const mlem_scan_t& a){
-        eff = a.eff;
-        projection = a.projection;
-        active = a.active;
-        return *this;
-    }
-
-    __device__ mlem_scan_t operator+(const mlem_scan_t& a) const{
-        mlem_scan_t res;
-        res.eff = a.eff + eff * !a.active;
-        res.projection = a.projection + projection * !a.active;
-        res.active = a.active || active;
-        return res;
-    }
-};'''
-
 
 def mem_allocator():
     dev = cuda.Context.get_device()
@@ -205,11 +159,14 @@ class RESET:
 
         sipms_per_voxel = int(math.floor(2 * self.sipm_dist / self.pitch) + 1)**2
         voxels_per_sipm = int((2 * self.sipm_dist)**2 / ( self.xsize * self.ysize))
-        compute_active_sensors(self.cudaf, self.nslices, nvoxels, self.nsipms, sipms_per_voxel,
+        sipm_probs_d, sipm_nums_d, active_sipms = compute_active_sensors(self.cudaf,
+                               self.nslices, nvoxels, self.nsipms, sipms_per_voxel,
                                voxels_per_sipm, voxels_d, slice_ids_d, self.sipm_dist, self.xs_sipms_d,
                                self.ys_sipms_d, self.sipm_param, self.sipms_corr_d, slices_start_d,
                                address_v, slices_start_nc_d, xmin_d, xmax_d, ymin_d, ymax_d,
                                self.xsize, self.ysize, anode_d)
+
+        compute_mlem(self.cudaf, self.nsipms, active_sipms, nvoxels, self.nslices, voxels_d, sipm_probs_d, sipm_nums_d)
 
 
 def create_voxels(cudaf, xmin_d, xmax_d, ymin_d, ymax_d, charges_d,
@@ -322,7 +279,7 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
     voxel_ids_d            = cuda.mem_alloc(sensor_probs_size * 4)
     cuda.memset_d8(active_sensor_probs_d, 0, sensor_probs_size)
     address_sensor_probs   = pycuda.gpuarray.zeros(sensor_probs_size, np.dtype('i4'))
-    address_sensor_probs_d = address_voxel_probs.gpudata
+    address_sensor_probs_d = address_sensor_probs.gpudata
 
     #One extra position
     sensor_starts_nc  = pycuda.gpuarray.zeros(int(nsensors * nslices + 1), np.dtype('i4'))
@@ -481,12 +438,19 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
 #        counts.append(c[1:])
 #    print(list(map(max, counts)))
 
+    all_probs = ProbsCompact2(voxel_probs_compact_d, sensors_ids_compact_d,
+                              voxel_starts_d, sensor_probs_d, voxel_ids_d,
+                              sensor_starts_d, sensor_starts_ids_d)
+    return all_probs, forward_num_d, num_active_sensors
+
+
+def compute_mlem(cudaf, nsensors, active_sensors, nvoxels, nslices, voxels_d,
+                 sipm_probs, sipm_fwd_num_d):
     # This will be the next function: mlem_step
     block_size = 1024
-    grid_size  = math.ceil(num_active_sensors / block_size)
+    grid_size  = math.ceil(active_sensors / block_size)
     print("block: ", block_size)
     print("grid: ", grid_size)
-
 
     voxels_per_block = 1024
     voxels_per_block = 512
@@ -497,20 +461,18 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
     forward_denom = cudaf.get_function('forward_denom')
     mlem_step = cudaf.get_function('mlem_step')
 
-
     iterations = 100
     for i in range(iterations):
-        print("iteration: ", i)
-        forward_denom(denoms_d , sensor_starts_d, sensor_starts_ids_d,
-                  sensor_probs_d, voxel_ids_d, voxels_d, num_active_sensors,
-                  block=(block_size, 1, 1), grid=(grid_size, 1))
+        forward_denom(denoms_d, sipm_probs.sensor_start,
+                      sipm_probs.sensor_start_ids, sipm_probs.sensor_probs,
+                      sipm_probs.voxel_ids, voxels_d, active_sensors,
+                      block=(block_size, 1, 1), grid=(grid_size, 1))
 
-        mlem_step(voxels_d, voxel_starts_d, voxel_probs_compact_d, sensors_ids_compact_d,
-              forward_num_d, denoms_d, np.int32(nvoxels),
-              block=(voxels_per_block, 1, 1), grid=(blocks, 1))
-
+        mlem_step(voxels_d, sipm_probs.voxel_start,
+                  sipm_probs.probs, sipm_probs.sensor_ids,
+                  sipm_fwd_num_d, denoms_d, np.int32(nvoxels),
+                  block=(voxels_per_block, 1, 1), grid=(blocks, 1))
 
     voxels_h = cuda.from_device(voxels_d, (nvoxels,), voxels_dt)
     energies = np.array(list(map(lambda v: v[2], voxels_h)))
-
-#    pdb.set_trace()
+    #pdb.set_trace()
