@@ -481,4 +481,22 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
 #        counts.append(c[1:])
 #    print(list(map(max, counts)))
 
-    pdb.set_trace()
+    # This will be the next function: mlem_step
+    block_size = 1024
+    grid_size  = math.ceil(num_active_sensors / block_size)
+    print("block: ", block_size)
+    print("grid: ", grid_size)
+
+
+    denoms   = pycuda.gpuarray.zeros(int(nsensors * nslices + 1), np.dtype('f4'))
+    denoms_d = denoms.gpudata
+    forward_denom = cudaf.get_function('forward_denom')
+
+
+    iterations = 100
+    for i in range(iterations):
+        forward_denom(denoms_d , sensor_starts_d, sensor_starts_ids_d,
+                  sensor_probs_d, voxel_ids_d, voxels_d, num_active_sensors,
+                  block=(block_size, 1, 1), grid=(grid_size, 1))
+
+#    pdb.set_trace()

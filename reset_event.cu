@@ -377,3 +377,26 @@ __global__ void compact_sensor_start(int * starts_in, int * starts_out,
 		}
 	}
 }
+
+__global__ void forward_denom(float * denoms, int * sensor_starts,
+	   	int * sensor_start_ids, float * sensor_probs,
+	   	int * voxel_ids, voxel * voxels, int size){
+
+	int id = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if(id < size){
+		int start = sensor_starts[id];
+		int end = sensor_starts[id+1];
+
+		float denom = 0;
+
+		for(int i=start; i<end; i++){
+			int vidx = voxel_ids[i];
+			denom += voxels[vidx].E * sensor_probs[i];
+		}
+
+		int sidx = sensor_start_ids[id];
+		denoms[sidx] = denom;
+	}
+
+}
