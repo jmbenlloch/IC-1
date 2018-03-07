@@ -148,9 +148,9 @@ __device__ void get_probability(float * prob, bool * active, voxel * voxels,
 
 // Launch block <1024,1,1>, grid < ceil(nvoxels/1024), 1>
 __global__ void compute_active_sensors(float * probs, bool * active, int * address, int * sensor_ids,
-		int * slice_ids, int * last_position, int * voxel_start,
-		int nvoxels, int nsensors, int sensors_per_voxel, voxel * voxels, float sensor_dist, 
-		float * xs, float * ys, float step, int nbins, float xmin, float ymin,
+		int * slice_ids, int * sensor_starts, bool * sensor_actives, int * sensor_starts_addr, 
+		int * voxel_start, int nvoxels, int nsensors, int sensors_per_voxel, voxel * voxels,
+	   	float sensor_dist, float * xs, float * ys, float step, int nbins, float xmin, float ymin,
 	   	correction * corrections){
 	int vidx = blockIdx.x * blockDim.x + threadIdx.x;
 	//printf("[%d][%d] id: %d, nsensors: %d\n", blockIdx.x, threadIdx.x, vidx, nsensors);
@@ -166,6 +166,7 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 		int slice_id = slice_ids[vidx];
 
 		for(int sidx=0; sidx<nsensors; sidx++){
+			int global_sidx = nsensors * slice_id + sidx;
 			int idx = base_idx + active_count;
 			//Compute distance and get probability
 			float prob;
@@ -182,14 +183,18 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 			//Avoid extra read/write
 			if(voxel_sensor){
 				probs[idx] = prob;
-				sensor_ids[idx] = sidx;
+				//sensor_ids[idx] = sidx;
+				sensor_ids[idx] = global_sidx;
 				//Increase the next one in order to get addresses after scan
 
 				if(sidx == 1352 && vidx == 2){
 					printf("voxels: [%d, %d] slice: %d, sidx: %d, voxel: %d, prob: %f\n", blockIdx.x, threadIdx.x, slice_id, sidx, vidx, prob);
 				}
 
-				atomicAdd(last_position + nsensors*slice_id + sidx + 1, 1);
+//				atomicAdd(last_position + nsensors*slice_id + sidx + 1, 1);
+				atomicAdd(sensor_starts + global_sidx + 1, 1);
+				sensor_starts_addr[global_sidx] = 1;
+				sensor_actives[global_sidx] = 1;
 			}
 
 			// Stop if all relevant sensors for current voxel has been found
@@ -335,12 +340,39 @@ __global__ void compact_probs(float * probs_in, float * probs_out,
 			if(actives[offset]){
 				float prob = probs_in[offset];
 				int sensor_id = ids_in[offset];
-				int slice_id  = slice_ids[i / sensors_per_voxel];
+//				int slice_id  = slice_ids[i / sensors_per_voxel];
 				probs_out[addr] = prob;
 				ids_out[addr]   = sensor_id;
 				
-				float response = sensors_response[slice_id * nsensors + sensor_id];
+				//float response = sensors_response[slice_id * nsensors + sensor_id];
+				float response = sensors_response[sensor_id];
 				forward_num[addr] = response * prob;
+			}
+		}
+	}
+}
+
+__global__ void compact_sensor_start(int * starts_in, int * starts_out, 
+		int * ids, int * address, bool * actives, int size){
+	int iterations = ceilf(1.f*size / (blockDim.x*gridDim.x));
+	int grid_base = blockIdx.x * blockDim.x * iterations;
+
+	// First thread will write also the last item
+	// (end position for last active sensor)
+	if(threadIdx.x == 0 && blockIdx.x ==0){
+		int addr = address[size-1];
+		starts_out[addr] = starts_in[size-1];
+		ids[addr] = size-1;
+	}
+
+	for(int i=0; i<iterations; i++){
+		int block_base = i * blockDim.x;
+		int offset = grid_base + block_base + threadIdx.x;
+		if(offset < size){
+			int addr = address[offset] - 1;  
+			if(actives[offset]){
+				starts_out[addr] = starts_in[offset];
+				ids[addr] = offset;
 			}
 		}
 	}

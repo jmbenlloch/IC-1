@@ -325,8 +325,14 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
     address_sensor_probs_d = address_voxel_probs.gpudata
 
     #One extra position
-    sensor_starts   = pycuda.gpuarray.zeros(int(nsensors * nslices + 1), np.dtype('i4'))
-    sensor_starts_d = sensor_starts.gpudata
+    sensor_starts_nc  = pycuda.gpuarray.zeros(int(nsensors * nslices + 1), np.dtype('i4'))
+    sensor_starts_nc_d  = sensor_starts_nc.gpudata
+    sensor_starts_active_d = cuda.mem_alloc(int(nsensors * nslices + 1))
+    sensor_starts_addr = pycuda.gpuarray.zeros(int(nsensors * nslices + 1), np.dtype('i4'))
+    sensor_starts_addr_d = sensor_starts_addr.gpudata
+
+    sensor_starts_d     = cuda.mem_alloc(int(nsensors * nslices + 1) * 4)
+    sensor_starts_ids_d = cuda.mem_alloc(int(nsensors * nslices + 1) * 4)
 #    sensor_starts_d = cuda.mem_alloc(int(nsensors * nslices + 1) * 4)
 #    cuda.memset_d32(sensor_starts_d, 0, int(nsensors))
 
@@ -340,9 +346,9 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
 
     compute_active = cudaf.get_function('compute_active_sensors')
     compute_active(voxel_probs_d, active_voxel_probs_d, address_voxel_probs_d, sensors_ids_d,
-                   slice_ids_d, sensor_starts_d, voxel_starts_d,
-                   np.int32(nvoxels), nsensors, np.int32(sensors_per_voxel), voxels_d,
-                   sensor_dist, xs_d, ys_d, sensor_param.step, sensor_param.nbins,
+                   slice_ids_d, sensor_starts_nc_d, sensor_starts_active_d, sensor_starts_addr_d,
+                   voxel_starts_d, np.int32(nvoxels), nsensors, np.int32(sensors_per_voxel),
+                   voxels_d, sensor_dist, xs_d, ys_d, sensor_param.step, sensor_param.nbins,
                    sensor_param.xmin, sensor_param.ymin, params_d,
                    block=(voxels_per_block, 1, 1), grid=(blocks, 1))
                    #block=(voxels_per_block, 1, 1), grid=(1, 1))
@@ -355,9 +361,11 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
 
     scan = InclusiveScanKernel(np.int32, "a+b")
     scan(address_voxel_probs)
-    sensor_starts_h = sensor_starts.get()
+    sensor_starts_nc_h = sensor_starts_nc.get()
+    sensor_starts_addr_h = sensor_starts_addr.get()
     voxel_starts_h  = voxel_starts.get()
-    scan(sensor_starts)
+    scan(sensor_starts_nc)
+    scan(sensor_starts_addr)
     scan(voxel_starts)
 
     #slices_start
@@ -379,6 +387,9 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
 
     voxel_probs_c_h = cuda.from_device(voxel_probs_compact_d, (probs_size,), np.dtype('f4'))
     sensor_ids_c_h  = cuda.from_device(sensors_ids_compact_d, (probs_size,), np.dtype('i4'))
+    slice_ids_c_h   = cuda.from_device(slice_ids_d, (nvoxels,), np.dtype('i4'))
+    forward_num_h   = cuda.from_device(forward_num_d, (probs_size,), np.dtype('f4'))
+    sensors_response_h = cuda.from_device(sensors_response_d, (nsensors*nslices,), np.dtype('f4'))
 
     # sensor probs
     #assumes even nsensors
@@ -392,7 +403,7 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
     counts = pycuda.gpuarray.zeros(int(nsensors), np.dtype('i4'))
 
     sensor_voxel_probs = cudaf.get_function('sensor_voxel_probs')
-    sensor_voxel_probs(sensor_probs_d, sensor_starts_d, voxel_ids_d, nsensors,
+    sensor_voxel_probs(sensor_probs_d, sensor_starts_nc_d, voxel_ids_d, nsensors,
                        np.int32(nslices), xs_d, ys_d, voxels_d, slices_start_nc_d,
                        voxel_addr.gpudata, sensor_dist, xmins_d, xmaxs_d, ymins_d, ymaxs_d,
                        xsize, ysize, sensor_param.xmin, sensor_param.ymin,
@@ -409,31 +420,45 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
     ymaxs_h  = cuda.from_device(ymaxs_d, (nslices,), np.dtype('f4'))
 
 
-    #check transpose
-    total_size = sensor_starts.get()[-1]
-    sensors_start = sensor_starts.get()
-    voxels_start  = voxel_starts.get()
-    slice_id = 0
-    voxel_id = 0
-    for i in range(total_size):
-        if i >= slices_compact_h[slice_id + 1]:
-            slice_id = slice_id + 1
-#            print(slice_id, i)
-        if i >= voxels_start[voxel_id + 1]:
-            voxel_id = voxel_id + 1
-            print(voxel_id, i)
-        voxel_sensor_p  = voxel_probs_c_h[i]
-        voxel_sensor_id = sensor_ids_c_h[i]
-        assert i == i
+    num_active_sensors = sensor_starts_addr.get()[-1]
+    compact_starts = cudaf.get_function('compact_sensor_start')
+    compact_starts(sensor_starts_nc_d, sensor_starts_d, sensor_starts_ids_d,
+                   sensor_starts_addr_d, sensor_starts_active_d,
+                   np.int32(nslices * nsensors + 1),
+                  block=(block_size, 1, 1), grid=(grid_size, 1))
 
-        sensor_start = sensors_start[slice_id * nsensors + voxel_sensor_id]
-        sensor_end   = sensors_start[slice_id * nsensors + voxel_sensor_id + 1]
-        for j in range(sensor_start, sensor_end):
-            if voxel_ids_h[j] == voxel_id:
-                try:
-                    assert sensor_probs_h[j] == voxel_sensor_p
-                except AssertionError:
-                    print("{} sid {}, vid {}, p1 {}, p2 {}".format(i, voxel_sensor_id, voxel_id, voxel_sensor_p, sensor_probs_h[j]))
+    sensor_starts_h     = cuda.from_device(sensor_starts_d, (num_active_sensors+1,), np.dtype('i4'))
+    sensor_starts_ids_h = cuda.from_device(sensor_starts_ids_d, (num_active_sensors+1,), np.dtype('i4'))
+
+    sensor_starts_nc_h = sensor_starts_nc.get()
+    for i,idx in enumerate(sensor_starts_ids_h):
+        assert sensor_starts_h[i] == sensor_starts_nc_h[idx]
+
+    #check transpose
+#    total_size = sensor_starts.get()[-1]
+#    sensors_start = sensor_starts.get()
+#    voxels_start  = voxel_starts.get()
+#    slice_id = 0
+#    voxel_id = 0
+#    for i in range(total_size):
+#        if i >= slices_compact_h[slice_id + 1]:
+#            slice_id = slice_id + 1
+##            print(slice_id, i)
+#        if i >= voxels_start[voxel_id + 1]:
+#            voxel_id = voxel_id + 1
+#            print(voxel_id, i)
+#        voxel_sensor_p  = voxel_probs_c_h[i]
+#        voxel_sensor_id = sensor_ids_c_h[i]
+#        assert i == i
+#
+#        sensor_start = sensors_start[slice_id * nsensors + voxel_sensor_id]
+#        sensor_end   = sensors_start[slice_id * nsensors + voxel_sensor_id + 1]
+#        for j in range(sensor_start, sensor_end):
+#            if voxel_ids_h[j] == voxel_id:
+#                try:
+#                    assert sensor_probs_h[j] == voxel_sensor_p
+#                except AssertionError:
+#                    print("{} sid {}, vid {}, p1 {}, p2 {}".format(i, voxel_sensor_id, voxel_id, voxel_sensor_p, sensor_probs_h[j]))
 
 
 #    addrs = address_voxel_probs.get()
@@ -456,4 +481,4 @@ def compute_active_sensors(cudaf, nslices, nvoxels, nsensors, sensors_per_voxel,
 #        counts.append(c[1:])
 #    print(list(map(max, counts)))
 
-#    pdb.set_trace()
+    pdb.set_trace()
