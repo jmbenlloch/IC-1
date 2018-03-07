@@ -392,11 +392,66 @@ __global__ void forward_denom(float * denoms, int * sensor_starts,
 
 		for(int i=start; i<end; i++){
 			int vidx = voxel_ids[i];
+
+//			if(sensor_start_ids[id] == 1288){
+//				printf("\tdenom: %f, E: %f, probs: %f\n", denom, voxels[vidx].E, sensor_probs[i]);
+//			}
+
 			denom += voxels[vidx].E * sensor_probs[i];
 		}
 
 		int sidx = sensor_start_ids[id];
+//		if(sidx == 1288){
+//			printf("\n\nforward_denom: %f\n\n", denom);
+//		}
 		denoms[sidx] = denom;
 	}
+}
 
+__global__ void mlem_step(voxel * voxels, int * voxel_starts,
+	   	float * probs, int * sensor_ids, float * fwd_nums,
+	   	float * fwd_denoms, int size){
+
+	int vidx = blockIdx.x * blockDim.x + threadIdx.x;
+//	if(blockIdx.x == 0 && threadIdx.x == 2){
+//		printf("before: voxel %d, x: %f, y: %f, E: %f\n", vidx, voxels[vidx].x, voxels[vidx].y, voxels[vidx].E);
+//	}
+
+	float eff = 0;
+	float forward = 0;
+
+	if(vidx < size){
+		int start = voxel_starts[vidx];
+		int end = voxel_starts[vidx+1];
+//		if(blockIdx.x == 0 && threadIdx.x == 40){
+//			printf("start: %d, end: %d\n", start, end);
+//		}
+
+		for(int i=start; i<end; i++){
+			if(blockIdx.x == 0 && threadIdx.x == 40){
+//				printf("eff (%f) +=: %f\n", eff, probs[i]);
+			}
+			eff += probs[i];
+			int sidx = sensor_ids[i];
+
+//			if(blockIdx.x == 0 && threadIdx.x == 40){
+//				printf("fwd (%f) +=: %f (%f/%f), sid: %d\n", forward, fwd_nums[i] / fwd_denoms[sidx], fwd_nums[i], fwd_denoms[sidx], sidx);
+//			}
+
+			// Check for nans
+			float value = fwd_nums[i] / fwd_denoms[sidx];
+			if(isfinite(value)){
+				forward += value;
+			}
+
+		}
+
+		voxels[vidx].E = voxels[vidx].E / eff * forward;
+
+//		if(blockIdx.x == 0 && threadIdx.x == 40){
+//			printf("eff: %f, fwd: %f\n", eff, forward);
+//			printf("after: voxel %d, x: %f, y: %f, E: %f\n", vidx, voxels[vidx].x, voxels[vidx].y, voxels[vidx].E);
+//		}
+
+	}
 }
