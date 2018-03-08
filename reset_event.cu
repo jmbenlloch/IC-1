@@ -6,17 +6,6 @@ struct voxel{
 	float E;
 };
 
-struct segmented_scan{
-	float value;
-	int active;
-};
-
-struct mlem_scan{
-	float eff;
-	float projection;
-	int flag;
-};
-
 struct correction{
 	float x;
 	float y;
@@ -392,66 +381,56 @@ __global__ void forward_denom(float * denoms, int * sensor_starts,
 
 		for(int i=start; i<end; i++){
 			int vidx = voxel_ids[i];
-
-//			if(sensor_start_ids[id] == 1288){
-//				printf("\tdenom: %f, E: %f, probs: %f\n", denom, voxels[vidx].E, sensor_probs[i]);
-//			}
-
 			denom += voxels[vidx].E * sensor_probs[i];
 		}
 
 		int sidx = sensor_start_ids[id];
-//		if(sidx == 1288){
-//			printf("\n\nforward_denom: %f\n\n", denom);
-//		}
 		denoms[sidx] = denom;
 	}
 }
 
-__global__ void mlem_step(voxel * voxels, int * voxel_starts,
-	   	float * probs, int * sensor_ids, float * fwd_nums,
-	   	float * fwd_denoms, int size){
+__global__ void mlem_step(voxel * voxels, int * pmt_voxel_starts,
+	   	float * pmt_probs, int * pmt_sensor_ids, float * pmt_nums, 
+		float * pmt_denoms, int * sipm_voxel_starts, float * sipm_probs,
+	   	int * sipm_sensor_ids, float * sipm_nums, float * sipm_denoms,
+	   	int size){
 
 	int vidx = blockIdx.x * blockDim.x + threadIdx.x;
-//	if(blockIdx.x == 0 && threadIdx.x == 2){
-//		printf("before: voxel %d, x: %f, y: %f, E: %f\n", vidx, voxels[vidx].x, voxels[vidx].y, voxels[vidx].E);
-//	}
 
-	float eff = 0;
-	float forward = 0;
+	float pmt_eff      = 0;
+	float pmt_fwd  = 0;
+	float sipm_eff     = 0;
+	float sipm_fwd = 0;
 
 	if(vidx < size){
-		int start = voxel_starts[vidx];
-		int end = voxel_starts[vidx+1];
-//		if(blockIdx.x == 0 && threadIdx.x == 40){
-//			printf("start: %d, end: %d\n", start, end);
-//		}
+		int sipm_start = sipm_voxel_starts[vidx];
+		int sipm_end   = sipm_voxel_starts[vidx+1];
 
-		for(int i=start; i<end; i++){
-			if(blockIdx.x == 0 && threadIdx.x == 40){
-//				printf("eff (%f) +=: %f\n", eff, probs[i]);
-			}
-			eff += probs[i];
-			int sidx = sensor_ids[i];
-
-//			if(blockIdx.x == 0 && threadIdx.x == 40){
-//				printf("fwd (%f) +=: %f (%f/%f), sid: %d\n", forward, fwd_nums[i] / fwd_denoms[sidx], fwd_nums[i], fwd_denoms[sidx], sidx);
-//			}
+		for(int i=sipm_start; i<sipm_end; i++){
+			sipm_eff += sipm_probs[i];
+			int sidx = sipm_sensor_ids[i];
 
 			// Check for nans
-			float value = fwd_nums[i] / fwd_denoms[sidx];
+			float value = sipm_nums[i] / sipm_denoms[sidx];
 			if(isfinite(value)){
-				forward += value;
+				sipm_fwd += value;
 			}
-
 		}
 
-		voxels[vidx].E = voxels[vidx].E / eff * forward;
+		int pmt_start = pmt_voxel_starts[vidx];
+		int pmt_end   = pmt_voxel_starts[vidx+1];
 
-//		if(blockIdx.x == 0 && threadIdx.x == 40){
-//			printf("eff: %f, fwd: %f\n", eff, forward);
-//			printf("after: voxel %d, x: %f, y: %f, E: %f\n", vidx, voxels[vidx].x, voxels[vidx].y, voxels[vidx].E);
-//		}
+		for(int i=pmt_start; i<pmt_end; i++){
+			pmt_eff += pmt_probs[i];
+			int sidx = pmt_sensor_ids[i];
 
+			// Check for nans
+			float value = pmt_nums[i] / pmt_denoms[sidx];
+			if(isfinite(value)){
+				pmt_fwd += value;
+			}
+		}
+
+		voxels[vidx].E = voxels[vidx].E / (pmt_eff + sipm_eff ) * (pmt_fwd + sipm_fwd);
 	}
 }
