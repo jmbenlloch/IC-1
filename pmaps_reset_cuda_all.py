@@ -10,6 +10,7 @@ from invisible_cities.core.system_of_units import pes, mm, mus, ns
 import reset_functions_event as rstf
 import invisible_cities.database.load_db as dbf
 from operator import itemgetter
+import tables as tb
 
 import pdb
 
@@ -33,6 +34,28 @@ reset = rstf.RESET(run_number, nsipms, npmts, dist, sipm_dist, pmt_dist, sipm_th
 
 #Lifetime correction
 ZCorr = corrf.LifetimeCorrection(1093.77, 23.99)
+
+class Voxel(tb.IsDescription):
+    x = tb.Float32Col()
+    y = tb.Float32Col()
+    z = tb.Float32Col()
+    E = tb.Float32Col()
+
+def write_hdf5(voxels, slices, zs):
+    h5file = tb.open_file("reset.h5", mode="w", title="voxels")
+    group = h5file.create_group("/", 'RESET', 'voxels')
+    table = h5file.create_table(group, 'voxels', Voxel, "voxels")
+
+    voxel = table.row
+    for i, v in enumerate(voxels):
+        voxel['x'] = v[0]
+        voxel['y'] = v[1]
+        voxel['z'] = zs[slices[i]]
+        voxel['E'] = v[2]
+        voxel.append()
+        table.flush()
+
+    h5file.close()
 
 def rebin_s2si(s2, s2si, rf):
     """given an s2 and a corresponding s2si, rebin them by a factor rf"""
@@ -127,6 +150,7 @@ for no in valid_peaks:
     charges = []
     slices_start_charges = []
     s2es = []
+    zs = []
     for tbin, e in enumerate(s2[1]):
         slice_ = pmapsfc.sipm_ids_and_charges_in_slice(s2si, tbin)
         z = (np.average(s2[0][tbin], weights=s2[1][tbin]) - t0)/1000.
@@ -139,6 +163,9 @@ for no in valid_peaks:
             charges.append(charge)
             slices_start_charges.append(charge.shape[0])
             s2es.append(s2e)
+            zs.append(z)
+
+    print(zs)
 
     sensors_ids = np.concatenate(sensors_ids).astype('i4')
     charges     = np.concatenate(charges)    .astype('f4')
@@ -163,8 +190,11 @@ for no in valid_peaks:
     slices_start = np.concatenate(([0], slices_start)).astype('i4')
 
     #reset.run(sensor_ids, charges, s2e, iterations)
-    reset.run(xmin, xmax, ymin, ymax, charge, slices_start, iterations,
+    voxels, slices = reset.run(xmin, xmax, ymin, ymax, charge, slices_start, iterations,
               sensors_ids, charges, slices_start_charges, s2es)
+
+    write_hdf5(voxels, slices, zs)
+#    pdb.set_trace()
 
 reset._destroy_context()
 

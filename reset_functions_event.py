@@ -134,7 +134,7 @@ class RESET:
         charges_d = cuda.to_device(charges)
         slices_start_charges_d = cuda.to_device(slices_start_charges)
 
-        nvoxels, voxels_d, slice_ids_d, slices_start_d, address_v = create_voxels(self.cudaf,
+        nvoxels, voxels_d, slice_ids_h, slice_ids_d, slices_start_d, address_v = create_voxels(self.cudaf,
                       xmin_d, xmax_d, ymin_d, ymax_d, charges_avg_d, self.xsize,
                       self.ysize, self.rmax, self.max_voxels, self.nslices,
                       slices_start_nc_d, int(slices_start[-1]), slices_start)
@@ -164,9 +164,11 @@ class RESET:
                                address_v, slices_start_nc_d, xmin_d, xmax_d, ymin_d, ymax_d,
                                self.xsize, self.ysize, cath_d)
 
-        compute_mlem(self.cudaf, voxels_d, nvoxels, self.nslices,
+        voxels_h = compute_mlem(self.cudaf, voxels_d, nvoxels, self.nslices,
                      self.npmts,  active_pmts, pmt_probs_d, pmt_nums_d,
                      self.nsipms, active_sipms, sipm_probs_d, sipm_nums_d)
+
+        return voxels_h, slice_ids_h
 
 
 def create_voxels(cudaf, xmin_d, xmax_d, ymin_d, ymax_d, charges_d,
@@ -204,8 +206,8 @@ def create_voxels(cudaf, xmin_d, xmax_d, ymin_d, ymax_d, charges_d,
                   block=(1024, 1, 1), grid=(nslices, 1))
 ##    voxels_c_h = cuda.from_device(voxels_d, (nvoxels,), voxels_dt)
     slices_start_c_h = cuda.from_device(slices_start_c_d, (nslices+1,), np.dtype('i4'))
-##    slice_ids_h = cuda.from_device(slice_ids_d, (nvoxels,), np.dtype('i4'))
     nvoxels_compact = int(slices_start_c_h[-1])
+    slice_ids_h = cuda.from_device(slice_ids_d, (nvoxels_compact,), np.dtype('i4'))
 
 
 ##    xmin_h = cuda.from_device(xmin_d, (nslices,), np.dtype('f4'))
@@ -213,7 +215,7 @@ def create_voxels(cudaf, xmin_d, xmax_d, ymin_d, ymax_d, charges_d,
 ##    ymin_h = cuda.from_device(ymin_d, (nslices,), np.dtype('f4'))
 ##    ymax_h = cuda.from_device(ymax_d, (nslices,), np.dtype('f4'))
 
-    return nvoxels_compact, voxels_d, slice_ids_d, slices_start_c_d, address
+    return nvoxels_compact, voxels_d, slice_ids_h, slice_ids_d, slices_start_c_d, address
 
 def create_anode_response(cudaf, nsensors, nslices, sensors_ids_d,
                           charges_d, ncharges, slices_start_charges_d):
@@ -494,3 +496,5 @@ def compute_mlem(cudaf, voxels_d, nvoxels, nslices,
     voxels_h = cuda.from_device(voxels_d, (nvoxels,), voxels_dt)
     energies = np.array(list(map(lambda v: v[2], voxels_h)))
 #    pdb.set_trace()
+
+    return voxels_h
