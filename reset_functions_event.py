@@ -117,22 +117,19 @@ class RESET:
     def _mem_allocations(self):
         pass
 
-    #def run(self, sensor_ids, charges, energy, iterations):
-    def run(self, xmin, xmax, ymin, ymax, charges_avg, slices_start,
-            iterations, sensors_ids, charges, slices_start_charges,
-            energies):
-        self.nslices = int(xmin.shape[0])
+    def run(self, voxels, slices, energies, slices_start, iterations):
+        self.nslices = int(voxels.xmin.shape[0])
         print("nslices: ", self.nslices)
-        xmin_d    = cuda.to_device(xmin)
-        xmax_d    = cuda.to_device(xmax)
-        ymin_d    = cuda.to_device(ymin)
-        ymax_d    = cuda.to_device(ymax)
-        charges_avg_d = cuda.to_device(charges_avg)
+        xmin_d        = cuda.to_device(voxels.xmin)
+        xmax_d        = cuda.to_device(voxels.xmax)
+        ymin_d        = cuda.to_device(voxels.ymin)
+        ymax_d        = cuda.to_device(voxels.ymax)
+        charges_avg_d = cuda.to_device(voxels.charge)
         slices_start_nc_d = cuda.to_device(slices_start)
 
-        sensors_ids_d = cuda.to_device(sensors_ids)
-        charges_d = cuda.to_device(charges)
-        slices_start_charges_d = cuda.to_device(slices_start_charges)
+        sensors_ids_d = cuda.to_device(slices.sensors)
+        charges_d = cuda.to_device(slices.charges)
+        slices_start_charges_d = cuda.to_device(slices.start)
 
         nvoxels, voxels_d, slice_ids_h, slice_ids_d, slices_start_d, address_v = create_voxels(self.cudaf,
                       xmin_d, xmax_d, ymin_d, ymax_d, charges_avg_d, self.xsize,
@@ -141,7 +138,7 @@ class RESET:
 
         anode_d = create_anode_response(self.cudaf, self.nsipms, self.nslices,
                               sensors_ids_d, charges_d,
-                              np.int32(charges.shape[0]),
+                              np.int32(slices.charges.shape[0]),
                               slices_start_charges_d)
 
         cath_d = create_cath_response(self.npmts, self.nslices, energies)
@@ -227,7 +224,7 @@ def create_anode_response(cudaf, nsensors, nslices, sensors_ids_d,
     create_anode = cudaf.get_function('create_anode_response')
     create_anode(anode_response_d, nsensors, sensors_ids_d, charges_d,
                  slices_start_charges_d,
-                 block=(1024, 1, 1), grid=(nslices, 1))
+                 block=(1024, 1, 1), grid=(1, 1))
 ##    anode_response_h = cuda.from_device(anode_response_d, (total_sensors,), np.dtype('f4'))
 
 ##    sensor_ids_h = cuda.from_device(sensors_ids_d, (ncharges,), np.dtype('i4'))

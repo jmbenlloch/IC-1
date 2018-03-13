@@ -44,6 +44,8 @@ for name, attrs in (
         ('ProbsCompact2'  , 'probs sensor_ids voxel_start sensor_probs voxel_ids sensor_start sensor_start_ids'),
         ('Scan'           , 'data active addr'),
         ('ResetProbs'     , 'probs transpose compact'),
+        ('Voxels'         , 'xmin xmax ymin ymax charge'),
+        ('ResetSlices'    , 'start sensors charges'),
         ('Measurement'    , 'value uncertainty')):
     _add_namedtuple_in_this_module(name, attrs)
 
