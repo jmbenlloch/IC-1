@@ -222,14 +222,8 @@ def create_voxels(cudaf, voxels_data_d,
                   active_d, address_d, slice_ids_nc_d,
                   block=(1024, 1, 1), grid=(nslices, 1))
 
-    voxels_h = cuda.from_device(voxels_nc_d, (nvoxels,), voxels_dt)
-    active_h = cuda.from_device(active_d, (nvoxels,), np.dtype('i1'))
-    slice_ids_nc_h = cuda.from_device(slice_ids_nc_d, (nvoxels,), np.dtype('i4'))
-
-    #scan = InclusiveScanKernel(np.int32, "a+b")
     scan = ExclusiveScanKernel(np.int32, "a+b", 0)
     address.shape = (nvoxels + 1,)
-    addr_noscan = address.get()
     scan(address)
 
     compact_voxels = cudaf.get_function('compact_voxels')
@@ -237,21 +231,9 @@ def create_voxels(cudaf, voxels_data_d,
                    address_d, active_d, slices_start_d, slices_start_c_d,
                   block=(1024, 1, 1), grid=(nslices, 1))
 
-    voxels_c_h = cuda.from_device(voxels_d, (nvoxels,), voxels_dt)
-
     slices_start_c_h = cuda.from_device(slices_start_c_d, (nslices+1,), np.dtype('i4'))
     nvoxels_compact = int(slices_start_c_h[-1])
     slice_ids_h = cuda.from_device(slice_ids_d, (nvoxels_compact,), np.dtype('i4'))
-
-##    xmin_h = cuda.from_device(xmin_d, (nslices,), np.dtype('f4'))
-##    xmax_h = cuda.from_device(xmax_d, (nslices,), np.dtype('f4'))
-##    ymin_h = cuda.from_device(ymin_d, (nslices,), np.dtype('f4'))
-##    ymax_h = cuda.from_device(ymax_d, (nslices,), np.dtype('f4'))
-
-
-    slices_start_nc_h = cuda.from_device(slices_start_d, (nslices+1,), np.dtype('i4'))
-
-#    pdb.set_trace()
 
     rst_voxels = ResetVoxels(nvoxels_compact, voxels_d, slice_ids_d, slices_start_c_d, address)
     return rst_voxels, slice_ids_h
