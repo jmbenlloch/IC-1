@@ -70,9 +70,11 @@ __global__ void compact_voxels(voxel * voxels_nc, voxel * voxels,
 	int iterations = ceilf(1.f*steps/blockDim.x);
 	if(threadIdx.x == 0){
 //		printf("[%d], start %d, end %d, steps %d, iterations: %d\n", blockDim.x, start, end, steps, iterations);
-		slice_start[blockIdx.x] = address[start] - 1;
+		//slice_start[blockIdx.x] = address[start] - 1;
+		slice_start[blockIdx.x] = address[start];
 		if (blockIdx.x == 0){
-			int lastSlice = slice_start_nc[gridDim.x]-1;
+//			int lastSlice = slice_start_nc[gridDim.x]-1;
+			int lastSlice = slice_start_nc[gridDim.x];
 			slice_start[gridDim.x] = address[lastSlice];
 		}
 	}
@@ -82,7 +84,8 @@ __global__ void compact_voxels(voxel * voxels_nc, voxel * voxels,
 		int vidx = threadIdx.x + i*blockDim.x;
 		int offset_in = start + vidx;
 		if(offset_in < end && actives[offset_in]){
-			int offset_out = address[offset_in] - 1;
+//			int offset_out = address[offset_in] - 1;
+			int offset_out = address[offset_in];
 			voxel * v_out = voxels + offset_out;
 			voxel * v_in  = voxels_nc + offset_in;
 //			printf("[%d]: offset %d, out %d\n", blockIdx.x, offset, address[offset]);

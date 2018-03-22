@@ -19,7 +19,8 @@ def create_voxels(voxels_data, slices_start, xsize, ysize, rmax):
     voxels_dt  = np.dtype([('x', 'f4'), ('y', 'f4'), ('E', 'f4')])
     voxels     = np.empty(max_voxels, dtype=voxels_dt)
     slice_ids  = np.empty(max_voxels, dtype='i4')
-    address    = np.empty(max_voxels, dtype='i4')
+    # One extra position to have the correct addresses after cumsum
+    address    = np.zeros(max_voxels + 1, dtype='i4')
 
     slice_start_voxels = np.zeros(nslices+1, dtype='i4')
 
@@ -47,12 +48,16 @@ def create_voxels(voxels_data, slices_start, xsize, ysize, rmax):
         slice_start_voxels[slice_id+1] = end
         nvoxels = nvoxels + nactive
 
-        address[slices_start[slice_id]:slices_start[slice_id+1]] = actives
+        print(slice_id, nactive, end)
+
+        addr_start = slices_start[slice_id]     + 1
+        addr_end   = slices_start[slice_id + 1] + 1
+        address[addr_start:addr_end] = actives
 
     address = address.cumsum()
 
-    reset_voxels = ResetVoxels(nvoxels, voxels,
-                               slice_ids, slices_start,
+    reset_voxels = ResetVoxels(nvoxels, voxels[:nvoxels],
+                               slice_ids[:nvoxels], slice_start_voxels,
                                address)
 
     return reset_voxels
