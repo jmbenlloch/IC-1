@@ -263,10 +263,9 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 		printf("sensor [%d, %d] start: %d, end: %d\n", blockIdx.x, threadIdx.x, start, end);
 	}
 
-
 	if(start <= end){
-		start = address_voxels[start] - 1;
-		end   = address_voxels[end] - 1;
+		start = address_voxels[start];
+		end   = address_voxels[end];
 	}
 
 	int count = 0;
@@ -304,13 +303,14 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 //	printf("[%d, %d] count: %d, slice: %d, sidx: %d, voxels: %d, %d\n", blockIdx.x, threadIdx.x, count, slice, sid, start, end);
 }
 
-// Launch grid<1,1> block <nvoxels+1, 1, 1>
+// Launch grid<1,1> block <nslices+1, 1, 1>
 __global__ void compact_slices(int * slice_start,
 	   int * slice_start_nc, int * address, int sensors_per_voxel){
 	int idx = slice_start_nc[threadIdx.x] * sensors_per_voxel;
-	slice_start[threadIdx.x] = address[idx] - 1;
+	slice_start[threadIdx.x] = address[idx];
 }
 
+// Launch grid<100,1> block <1024, 1, 1>
 __global__ void compact_probs(float * probs_in, float * probs_out, 
 		float * forward_num, int * ids_in, int * ids_out, int * slice_ids,
 	   	int * address, bool * actives, int size,
@@ -323,20 +323,14 @@ __global__ void compact_probs(float * probs_in, float * probs_out,
 		int block_base = i * blockDim.x;
 		int offset = grid_base + block_base + threadIdx.x;
 		if(offset < size){
-			int addr = address[offset] - 1;  
-
-//			if(threadIdx.x == 0 && blockIdx.x == 0){
-//				printf("[%d, %d] iter: %d, offset %d, addr: %d\n", blockIdx.x, threadIdx.x, i, offset, addr);
-//			}
+			int addr = address[offset];  
 
 			if(actives[offset]){
 				float prob = probs_in[offset];
 				int sensor_id = ids_in[offset];
-//				int slice_id  = slice_ids[i / sensors_per_voxel];
 				probs_out[addr] = prob;
 				ids_out[addr]   = sensor_id;
 				
-				//float response = sensors_response[slice_id * nsensors + sensor_id];
 				float response = sensors_response[sensor_id];
 				forward_num[addr] = response * prob;
 			}
@@ -361,7 +355,8 @@ __global__ void compact_sensor_start(int * starts_in, int * starts_out,
 		int block_base = i * blockDim.x;
 		int offset = grid_base + block_base + threadIdx.x;
 		if(offset < size){
-			int addr = address[offset] - 1;  
+			//int addr = address[offset] - 1;  
+			int addr = address[offset];
 			if(actives[offset]){
 				starts_out[addr] = starts_in[offset];
 				ids[addr] = offset;
