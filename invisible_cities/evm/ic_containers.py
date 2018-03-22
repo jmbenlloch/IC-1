@@ -45,6 +45,7 @@ for name, attrs in (
         ('Scan'           , 'data active addr'),
         ('ResetProbs'     , 'probs transpose compact'),
         ('Voxels'         , 'xmin xmax ymin ymax charge'),
+        ('ResetVoxels'    , 'nvoxels voxels slice_ids slice_start address'),
         ('ResetSlices'    , 'start sensors charges'),
         ('Measurement'    , 'value uncertainty')):
     _add_namedtuple_in_this_module(name, attrs)

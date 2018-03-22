@@ -11,6 +11,8 @@ from invisible_cities.evm.ic_containers import ResetSlices
 import numpy as np
 import tables as tb
 
+import pdb
+
 def refresh_selector(param_val):
     selector = s1s2filt.S12Selector(s1_nmin = param_val['s1_num'],
                                     s1_nmax = param_val['s1_num'],
@@ -150,11 +152,11 @@ def prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm,
 def slices_start(voxels, xsize, ysize):
     nslices = voxels.xmin.shape[0]
     # One extra position to the right to have the ending of the last slice
-    slices_start = np.zeros(nslices+1, dtype='i4')
+    slices_start = np.zeros(nslices+1)
     for i in range(nslices):
         slices_start[i+1] = nvoxels(voxels.xmin[i], voxels.xmax[i], xsize,
                                     voxels.ymin[i], voxels.ymax[i], ysize)
-    slices_start = slices_start.cumsum()
+    slices_start = slices_start.cumsum().astype('i4')
     return slices_start
 
 
