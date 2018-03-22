@@ -238,36 +238,17 @@ def create_voxels(cudaf, voxels_data_d,
     rst_voxels = ResetVoxels(nvoxels_compact, voxels_d, slice_ids_d, slices_start_c_d, address)
     return rst_voxels, slice_ids_h
 
-#def create_anode_response(cudaf, nsensors, nslices, sensors_ids_d,
-#                          charges_d, ncharges, slices_start_charges_d):
 def create_anode_response(cudaf, slices_data_d, nsensors, nslices, ncharges):
     total_sensors = int(nslices * nsensors)
     anode_response_d = cuda.mem_alloc(total_sensors * 4)
     cuda.memset_d32(anode_response_d, 0, total_sensors)
-##    anode_response_h = cuda.from_device(anode_response_d, (total_sensors,), np.dtype('i4'))
 
     create_anode = cudaf.get_function('create_anode_response')
     create_anode(anode_response_d, nsensors,
                  slices_data_d.sensors,
                  slices_data_d.charges,
                  slices_data_d.start,
-                 block=(1024, 1, 1), grid=(1, 1))
-##    anode_response_h = cuda.from_device(anode_response_d, (total_sensors,), np.dtype('f4'))
-
-##    sensor_ids_h = cuda.from_device(sensors_ids_d, (ncharges,), np.dtype('i4'))
-##    charges_h = cuda.from_device(charges_d, (ncharges,), np.dtype('f4'))
-##    slices_h = cuda.from_device(slices_start_charges_d, (nslices,), np.dtype('i4'))
-
-
-#    pdb.set_trace()
-
-    #check resulst is correct
-#    slc = 0
-#    for i in range(slices_h[-1]):
-#        if i >= slices_h[slc+1]:
-#            slc = slc + 1
-#        idx = slc * nsensors + sensor_ids_h[i]
-#        assert anode_response_h[idx] == charges_h[i]
+                 block=(1024, 1, 1), grid=(nslices, 1))
 
     return anode_response_d
 
@@ -474,7 +455,7 @@ def compute_active_sensors(cudaf, rst_voxels, nslices, nsensors, sensors_per_vox
 #        counts.append(c[1:])
 #    print(list(map(max, counts)))
 
-    pdb.set_trace()
+#    pdb.set_trace()
 
     all_probs = ProbsCompact2(voxel_probs_compact_d, sensors_ids_compact_d,
                               voxel_starts_d, sensor_probs_d, voxel_ids_d,

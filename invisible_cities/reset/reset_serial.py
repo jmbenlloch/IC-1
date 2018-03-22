@@ -48,8 +48,6 @@ def create_voxels(voxels_data, slices_start, xsize, ysize, rmax):
         slice_start_voxels[slice_id+1] = end
         nvoxels = nvoxels + nactive
 
-        print(slice_id, nactive, end)
-
         addr_start = slices_start[slice_id]     + 1
         addr_end   = slices_start[slice_id + 1] + 1
         address[addr_start:addr_end] = actives
@@ -73,8 +71,8 @@ def create_anode_response(nslices, nsensors, slices):
         if s >= slices.start[slice_id+1]:
             slice_id = slice_id + 1
 
-            position = slices.sensors[s] + nsensors * slice_id
-            anode_response[position] = slices.charges[s]
+        position = slices.sensors[s] + nsensors * slice_id
+        anode_response[position] = slices.charges[s]
 
     return anode_response
 
