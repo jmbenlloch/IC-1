@@ -16,6 +16,7 @@ import pdb
 
 from invisible_cities.evm.ic_containers import SensorsParams
 from invisible_cities.evm.ic_containers import ResetProbs
+from invisible_cities.evm.ic_containers import ResetProbs2
 from invisible_cities.evm.ic_containers import ProbsCompact
 from invisible_cities.evm.ic_containers import ProbsCompact2
 from invisible_cities.evm.ic_containers import Scan
@@ -149,20 +150,21 @@ class RESET:
 #                               slices_start_nc_d, voxels_data_d,
 #                               self.xsize, self.ysize, anode_d)
 
-        probs_d, sensors_ids_d, voxel_starts_d, sensor_starts, fwd_num_d = compute_probabilites(self.cudaf,
+        #probs_d, sensors_ids_d, voxel_starts_d, sensor_starts, fwd_num_d = compute_probabilites(self.cudaf,
+        sipm_probs = compute_probabilites(self.cudaf,
                                rst_voxels, self.nslices, self.nsipms, sipms_per_voxel,
                                self.sipm_dist, self.xs_sipms_d,
                                self.ys_sipms_d, self.sipm_param, self.sipms_corr_d,
                                slices_start_nc_d,
                                self.xsize, self.ysize, anode_d)
 
-        compute_sensor_probs(self.cudaf,
-                             rst_voxels, self.nslices, self.nsipms, sipms_per_voxel,
-                             voxels_per_sipm, self.sipm_dist, self.xs_sipms_d,
-                             self.ys_sipms_d, self.sipm_param, self.sipms_corr_d,
-                             slices_start_nc_d, voxels_data_d,
-                             self.xsize, self.ysize, anode_d,
-                             voxel_starts_d, sensor_starts)
+#        compute_sensor_probs(self.cudaf,
+#                             rst_voxels, self.nslices, self.nsipms, sipms_per_voxel,
+#                             voxels_per_sipm, self.sipm_dist, self.xs_sipms_d,
+#                             self.ys_sipms_d, self.sipm_param, self.sipms_corr_d,
+#                             slices_start_nc_d, voxels_data_d,
+#                             self.xsize, self.ysize, anode_d,
+#                             voxel_starts_d, sensor_starts)
 
         pmts_per_voxel = self.npmts
         voxels_per_pmt = int((2 * self.pmt_dist)**2 / ( self.xsize * self.ysize))
@@ -208,6 +210,22 @@ def copy_reset_voxels_d2h(rst_voxels_d, nslices):
 
     rst_voxels = ResetVoxels(nvoxels, voxels_h, ids_h, start_h, address_h)
     return rst_voxels
+
+def copy_reset_probs_d2h(probs_d, probs_size, nvoxels, nslices, nsensors):
+    probs_h      = cuda.from_device(probs_d.probs,       (int(probs_size),), np.dtype('f4'))
+    sensor_ids_h = cuda.from_device(probs_d.sensor_ids, (int(probs_size),), np.dtype('i4'))
+    fwd_num_h    = cuda.from_device(probs_d.fwd_nums,     (int(probs_size),), np.dtype('f4'))
+
+    voxel_start_h  = cuda.from_device(probs_d.voxel_start,  (int(nvoxels+1),), np.dtype('i4'))
+
+    sensor_start_data_h   = cuda.from_device(probs_d.sensor_start.data,   (int(nsensors * nslices + 1),), np.dtype('i4'))
+    sensor_start_active_h = cuda.from_device(probs_d.sensor_start.active, (int(nsensors * nslices + 1),), np.dtype('i1'))
+    sensor_start_addr_h   = probs_d.sensor_start.addr.get()
+
+    sensor_start_h = Scan(sensor_start_data_h, sensor_start_active_h, sensor_start_addr_h)
+
+    rst_probs = ResetProbs2(probs_h, sensor_ids_h, voxel_start_h, sensor_start_h, fwd_num_h)
+    return rst_probs
 
 
 def create_voxels(cudaf, voxels_data_d,
@@ -354,7 +372,11 @@ def compute_probabilites(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel
 
     sensor_starts = Scan(sensor_starts_nc.gpudata, sensor_starts_active_d, sensor_starts_addr)
 
-    return probs_d, sensors_ids_d, voxel_starts.gpudata, sensor_starts, fwd_num_d
+    nprobs = voxel_starts.get()[-1]
+
+    probs = ResetProbs2(probs_d, sensors_ids_d, voxel_starts.gpudata, sensor_starts, fwd_num_d)
+    #return probs_d, sensors_ids_d, voxel_starts.gpudata, sensor_starts, fwd_num_d
+    return probs, nprobs
 
 def compute_sensor_probs(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel, voxels_per_sensor,
                          sensor_dist, xs_d, ys_d, sensor_param, params_d,

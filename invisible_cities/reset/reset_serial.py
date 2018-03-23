@@ -2,6 +2,8 @@ import invisible_cities.reset.reset_utils as reset
 
 import numpy as np
 import math
+import tables as tb
+from invisible_cities.evm.ic_containers import SensorsParams
 
 from invisible_cities.core.system_of_units import pes, mm, mus, ns
 import invisible_cities.reco.corrections    as corrf
@@ -9,6 +11,28 @@ import invisible_cities.database.load_db as dbf
 import reset_functions_event as rstf
 
 from invisible_cities.evm.ic_containers import ResetVoxels
+
+def read_corrections_file(filename, node):
+    corr_h5 = tb.open_file(filename)
+    corr_table = getattr(corr_h5.root.ResetMap, node)
+    corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
+
+    # we need to explicitly build it to get into memory only (x,y,factor)
+    # to check: struct.unpack('f', bytes(pmts_corr.data)[i*4:(i+1)*4])
+    params = np.array(list(zip(corr_table.col('x'),
+                               corr_table.col('y'),
+                               corr_table.col('factor'))),
+                      dtype=corrections_dt)
+
+    step  =  params[1][1] - params[0][1]
+    xmin  =  params[0][0]
+    ymin  =  params[0][1]
+
+    nbins = (params[-1][0] - params[0][0]) / step + 1
+    nbins = nbins.astype('i4')
+    corr_h5.close()
+
+    return SensorsParams(xmin, ymin, step, nbins, params)
 
 def create_voxels(voxels_data, slices_start, xsize, ysize, rmax):
     max_voxels = slices_start[-1]
@@ -75,6 +99,45 @@ def create_anode_response(nslices, nsensors, slices):
         anode_response[position] = slices.charges[s]
 
     return anode_response
+
+def get_probability(xdist, ydist, sensor_param):
+    xindex = math.floor((xdist - sensor_param.xmin) / sensor_param.step + 0.5)
+    yindex = math.floor((ydist - sensor_param.ymin) / sensor_param.step + 0.5)
+    prob_idx = xindex * sensor_param.nbins + yindex
+    return sensor_param.params[prob_idx][2]
+
+def compute_probabilities_cuda(voxels, slice_ids, nvoxels, nslices, xs, ys, nsensors, sensors_per_voxel, sensor_dist, sensor_param, sensor_response):
+    probs_size = nvoxels * sensors_per_voxel
+    sensor_ids = np.empty(probs_size, dtype='i4')
+    probs      = np.empty(probs_size, dtype='f4')
+    fwd_num    = np.empty(probs_size, dtype='f4')
+    voxel_starts = np.zeros(nvoxels+1, dtype='i4')
+
+    sensor_starts = np.zeros(nsensors * nslices + 1, dtype='i4')
+
+    last_position = 0
+    for i, v in enumerate(voxels):
+        for s in range(nsensors):
+            xdist = v[0] - xs[s]
+            ydist = v[1] - ys[s]
+            active = ((abs(xdist) <= sensor_dist) and (abs(ydist) <= sensor_dist))
+            if active:
+                #print(v, s, xdist, ydist)
+                sens_idx = slice_ids[i] * nsensors + s
+                sensor_starts[sens_idx + 1] = sensor_starts[sens_idx + 1] + 1
+
+                #sensor_ids[last_position] = s
+                sensor_ids[last_position] = sens_idx
+                prob = get_probability(xdist, ydist, sensor_param)
+                probs     [last_position] = prob
+                fwd_num   [last_position] = prob * sensor_response[sens_idx]
+                last_position = last_position + 1
+
+            voxel_starts[i+1] = last_position
+
+    sensor_starts = sensor_starts.cumsum()
+
+    return probs[:last_position], sensor_ids[:last_position], voxel_starts, sensor_starts, last_position, fwd_num[:last_position]
 
 def compute_probabilities(voxels, nvoxels, xs, ys, nsensors, sensors_per_voxel, sensor_dist, sensor_param, sensor_response):
     probs_size = nvoxels * sensors_per_voxel

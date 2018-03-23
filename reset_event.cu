@@ -184,7 +184,9 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 				}
 
 //				atomicAdd(last_position + nsensors*slice_id + sidx + 1, 1);
-				atomicAdd(sensor_starts + global_sidx + 1, 1);
+				//The scan is excluvise (starting with 0 as neutral element)
+				//atomicAdd(sensor_starts + global_sidx + 1, 1);
+				atomicAdd(sensor_starts + global_sidx, 1);
 				sensor_starts_addr[global_sidx] = 1;
 				sensor_actives[global_sidx] = 1;
 			}
@@ -194,7 +196,9 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 				break;
 			}
 		}
-	voxel_start[vidx+1] = active_count;
+//	voxel_start[vidx+1] = active_count;
+	//The scan is excluvise (starting with 0 as neutral element)
+	voxel_start[vidx] = active_count;
 	}
 }
 

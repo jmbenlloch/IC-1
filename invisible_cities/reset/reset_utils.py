@@ -138,6 +138,10 @@ def prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm,
             nslices  = nslices  + 1
             nsensors = nsensors + sensors
 
+        #TODO: REMOVE!!!
+        if tbin > 4:
+            break
+
     voxels = Voxels(xmins      [:nslices], xmaxs[:nslices],
                     ymins      [:nslices], ymaxs[:nslices],
                     avg_charges[:nslices])
