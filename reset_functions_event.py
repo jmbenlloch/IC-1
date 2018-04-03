@@ -17,6 +17,7 @@ import pdb
 from invisible_cities.evm.ic_containers import SensorsParams
 from invisible_cities.evm.ic_containers import ResetProbs
 from invisible_cities.evm.ic_containers import ResetProbs2
+from invisible_cities.evm.ic_containers import ResetSnsProbs
 from invisible_cities.evm.ic_containers import ProbsCompact
 from invisible_cities.evm.ic_containers import ProbsCompact2
 from invisible_cities.evm.ic_containers import Scan
@@ -151,20 +152,21 @@ class RESET:
 #                               self.xsize, self.ysize, anode_d)
 
         #probs_d, sensors_ids_d, voxel_starts_d, sensor_starts, fwd_num_d = compute_probabilites(self.cudaf,
-        sipm_probs = compute_probabilites(self.cudaf,
+        sipm_probs, nprobs_sipm = compute_probabilites(self.cudaf,
                                rst_voxels, self.nslices, self.nsipms, sipms_per_voxel,
                                self.sipm_dist, self.xs_sipms_d,
                                self.ys_sipms_d, self.sipm_param, self.sipms_corr_d,
                                slices_start_nc_d,
                                self.xsize, self.ysize, anode_d)
 
-#        compute_sensor_probs(self.cudaf,
-#                             rst_voxels, self.nslices, self.nsipms, sipms_per_voxel,
-#                             voxels_per_sipm, self.sipm_dist, self.xs_sipms_d,
-#                             self.ys_sipms_d, self.sipm_param, self.sipms_corr_d,
-#                             slices_start_nc_d, voxels_data_d,
-#                             self.xsize, self.ysize, anode_d,
-#                             voxel_starts_d, sensor_starts)
+
+        sipm_sns_probs = compute_sensor_probs(self.cudaf,
+                             rst_voxels, self.nslices, self.nsipms, sipms_per_voxel,
+                             voxels_per_sipm, self.sipm_dist, self.xs_sipms_d,
+                             self.ys_sipms_d, self.sipm_param, self.sipms_corr_d,
+                             slices_start_nc_d, voxels_data_d,
+                             self.xsize, self.ysize, anode_d,
+                             sipm_probs.sensor_start)
 
         pmts_per_voxel = self.npmts
         voxels_per_pmt = int((2 * self.pmt_dist)**2 / ( self.xsize * self.ysize))
@@ -382,7 +384,7 @@ def compute_sensor_probs(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel
                          sensor_dist, xs_d, ys_d, sensor_param, params_d,
                          slices_start_nc_d, voxels_data_d,
                          xsize, ysize, sensors_response_d,
-                         voxel_starts_d, sensor_starts):
+                         sensor_starts):
     sensor_probs_size = int(nslices * nsensors * voxels_per_sensor)
 
     sensor_probs_d         = cuda.mem_alloc(sensor_probs_size * 4)
@@ -432,7 +434,9 @@ def compute_sensor_probs(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel
 #    sensor_starts_h     = cuda.from_device(sensor_starts_d, (num_active_sensors+1,), np.dtype('i4'))
 #    sensor_starts_ids_h = cuda.from_device(sensor_starts_ids_d, (num_active_sensors+1,), np.dtype('i4'))
 
-    return sensor_probs_d, sensor_starts_d, sensor_starts_ids_d
+    sensor_probs = ResetSnsProbs(sensor_probs_d, voxel_ids_d, sensor_starts_d, sensor_starts_ids_d)
+
+    return sensor_probs
 
 
 def compute_active_sensors(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel, voxels_per_sensor,

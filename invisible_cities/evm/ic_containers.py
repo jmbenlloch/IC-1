@@ -45,6 +45,7 @@ for name, attrs in (
         ('Scan'           , 'data active addr'),
         ('ResetProbs'     , 'probs transpose compact'),
         ('ResetProbs2'    , 'probs sensor_ids voxel_start sensor_start fwd_nums'),
+        ('ResetSnsProbs'  , 'probs voxel_ids sensor_start sensor_start_ids'),
         ('Voxels'         , 'xmin xmax ymin ymax charge'),
         ('ResetVoxels'    , 'nvoxels voxels slice_ids slice_start address'),
         ('ResetSlices'    , 'start sensors charges'),
