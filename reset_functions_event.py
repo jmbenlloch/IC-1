@@ -160,7 +160,7 @@ class RESET:
                                self.xsize, self.ysize, anode_d)
 
 
-        sipm_sns_probs = compute_sensor_probs(self.cudaf,
+        sipm_sns_probs, nprobs_sns_sipms = compute_sensor_probs(self.cudaf,
                              rst_voxels, self.nslices, self.nsipms, sipms_per_voxel,
                              voxels_per_sipm, self.sipm_dist, self.xs_sipms_d,
                              self.ys_sipms_d, self.sipm_param, self.sipms_corr_d,
@@ -176,6 +176,23 @@ class RESET:
 #                               self.ys_pmts_d, self.pmt_param, self.pmts_corr_d,
 #                               slices_start_nc_d, voxels_data_d,
 #                               self.xsize, self.ysize, cath_d)
+
+
+        pmt_probs, nprobs_pmt = compute_probabilites(self.cudaf,
+                               rst_voxels, self.nslices, self.npmts, pmts_per_voxel,
+                               self.pmt_dist, self.xs_pmts_d,
+                               self.ys_pmts_d, self.pmt_param, self.pmts_corr_d,
+                               slices_start_nc_d,
+                               self.xsize, self.ysize, anode_d)
+
+
+        pmt_sns_probs, nprobs_sns_pmts = compute_sensor_probs(self.cudaf,
+                             rst_voxels, self.nslices, self.npmts, pmts_per_voxel,
+                             voxels_per_pmt, self.pmt_dist, self.xs_pmts_d,
+                             self.ys_pmts_d, self.pmt_param, self.pmts_corr_d,
+                             slices_start_nc_d, voxels_data_d,
+                             self.xsize, self.ysize, anode_d,
+                             pmt_probs.sensor_start)
 
         voxels_h = []
 #        voxels_h = compute_mlem(self.cudaf, voxels_d, rst_voxels.nvoxels, self.nslices,
@@ -202,7 +219,7 @@ def copy_slice_data_h2d(slices):
     slices_data_d = ResetSlices(slices_start_d, sensors_ids_d, charges_d)
     return slices_data_d
 
-def copy_reset_voxels_d2h(rst_voxels_d, nslices):
+def copy_voxels_d2h(rst_voxels_d, nslices):
     nvoxels = rst_voxels_d.nvoxels
 
     voxels_h  = cuda.from_device(rst_voxels_d.voxels,      (nvoxels,),   voxels_dt)
@@ -213,7 +230,7 @@ def copy_reset_voxels_d2h(rst_voxels_d, nslices):
     rst_voxels = ResetVoxels(nvoxels, voxels_h, ids_h, start_h, address_h)
     return rst_voxels
 
-def copy_reset_probs_d2h(probs_d, probs_size, nvoxels, nslices, nsensors):
+def copy_probs_d2h(probs_d, probs_size, nvoxels, nslices, nsensors):
     probs_h      = cuda.from_device(probs_d.probs,       (int(probs_size),), np.dtype('f4'))
     sensor_ids_h = cuda.from_device(probs_d.sensor_ids, (int(probs_size),), np.dtype('i4'))
     fwd_num_h    = cuda.from_device(probs_d.fwd_nums,     (int(probs_size),), np.dtype('f4'))
@@ -228,6 +245,17 @@ def copy_reset_probs_d2h(probs_d, probs_size, nvoxels, nslices, nsensors):
 
     rst_probs = ResetProbs2(probs_h, sensor_ids_h, voxel_start_h, sensor_start_h, fwd_num_h)
     return rst_probs
+
+
+def copy_sensor_probs_d2h(sns_probs_d, probs_size, active_sensors):
+    sns_probs_h = cuda.from_device(sns_probs_d.probs,     (int(probs_size),), np.dtype('f4'))
+    voxel_ids_h = cuda.from_device(sns_probs_d.voxel_ids, (int(probs_size),), np.dtype('i4'))
+
+    sensor_starts_h     = cuda.from_device(sns_probs_d.sensor_start,     (int(active_sensors+1),), np.dtype('i4'))
+    sensor_starts_ids_h = cuda.from_device(sns_probs_d.sensor_start_ids, (int(active_sensors),), np.dtype('i4'))
+
+    sensor_probs = ResetSnsProbs(sns_probs_h, voxel_ids_h, sensor_starts_h, sensor_starts_ids_h)
+    return sensor_probs
 
 
 def create_voxels(cudaf, voxels_data_d,
@@ -436,7 +464,7 @@ def compute_sensor_probs(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel
 
     sensor_probs = ResetSnsProbs(sensor_probs_d, voxel_ids_d, sensor_starts_d, sensor_starts_ids_d)
 
-    return sensor_probs
+    return sensor_probs, num_active_sensors
 
 
 def compute_active_sensors(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel, voxels_per_sensor,

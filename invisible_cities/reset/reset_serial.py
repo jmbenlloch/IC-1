@@ -198,7 +198,7 @@ def compute_sensor_probs(probs, nprobs, nslices, nsensors, voxel_starts, sensor_
     sensor_starts_c_ids = np.where(active_sensors)[0] - 1
     sensor_starts_c = sensor_counts.cumsum()[np.concatenate((sensor_starts_c_ids, [-1]))]
 
-    return sensor_probs, sensor_starts, sensor_starts_c, sensor_starts_c_ids
+    return sensor_probs, voxel_ids, sensor_starts, sensor_starts_c, sensor_starts_c_ids
 
 def forward_denoms(nsensors, nslices, voxels, sensor_probs, voxel_ids, sensor_starts, sensor_starts_ids):
     nsensor_active = sensor_starts_ids.shape[0]
@@ -213,7 +213,7 @@ def forward_denoms(nsensors, nslices, voxels, sensor_probs, voxel_ids, sensor_st
             vid = voxel_ids[i]
             denom += voxels[vid][2] * sensor_probs[i]
 
-        sid = sensor_starts_c_ids[id]
+        sid = sensor_starts_ids[id]
         denoms[sid] = denom
 
     return denoms
