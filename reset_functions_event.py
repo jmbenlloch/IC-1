@@ -406,7 +406,7 @@ def compute_sensor_probs(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel
     counts = pycuda.gpuarray.zeros(int(nsensors), np.dtype('i4'))
 
     sensor_voxel_probs = cudaf.get_function('sensor_voxel_probs')
-    sensor_voxel_probs(sensor_probs_d, sensor_starts.data, voxel_ids_d, nsensors,
+    sensor_voxel_probs(sensor_probs_d, sensor_starts.data, voxel_ids_d, np.int32(nsensors),
                        np.int32(nslices), xs_d, ys_d, rst_voxels.voxels, slices_start_nc_d,
                        rst_voxels.address.gpudata, sensor_dist,
                        voxels_data_d.xmin,

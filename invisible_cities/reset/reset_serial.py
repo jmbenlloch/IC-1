@@ -172,7 +172,7 @@ def compute_probabilities(voxels, nvoxels, xs, ys, nsensors, sensors_per_voxel, 
 
     return probs[:last_position], sensor_ids[:last_position], voxel_starts, sensor_starts, last_position, fwd_num[:last_position]
 
-def compute_sensor_probs(probs, nprobs, nsensors, voxel_starts, sensor_ids, slice_ids):
+def compute_sensor_probs(probs, nprobs, nslices, nsensors, voxel_starts, sensor_starts, sensor_ids, slice_ids):
     # offset one position to get the ending position of the last element
     sensor_counts = np.zeros(nsensors * nslices + 1, dtype='i4')
     voxel_ids    = np.empty(nprobs, dtype='i4')
