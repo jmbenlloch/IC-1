@@ -467,9 +467,9 @@ def compute_mlem(cudaf, rst_voxels_d, nslices,
     voxels_per_block = 512
     blocks = math.ceil(rst_voxels_d.nvoxels / voxels_per_block)
 
-    sipm_denoms   = pycuda.gpuarray.zeros(int(nsipms * nslices + 1), np.dtype('f4'))
+    sipm_denoms   = pycuda.gpuarray.zeros(int(nsipms * nslices), np.dtype('f4'))
     sipm_denoms_d = sipm_denoms.gpudata
-    pmt_denoms    = pycuda.gpuarray.zeros(int(npmts * nslices + 1), np.dtype('f4'))
+    pmt_denoms    = pycuda.gpuarray.zeros(int(npmts * nslices), np.dtype('f4'))
     pmt_denoms_d  = pmt_denoms.gpudata
 
     forward_denom = cudaf.get_function('forward_denom')
