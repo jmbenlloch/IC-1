@@ -328,16 +328,10 @@ def compute_probabilites(cudaf, voxels, nsensors, sensors_per_voxel,
 
     probs_h = cuda.from_device(probs_nc_d, (probs_size,), np.dtype('f4'))
     probs_active_h = cuda.from_device(probs_active_d, (probs_size,), np.dtype('i1'))
-    sensor_ids_nc_h = cuda.from_device(sensors_ids_nc_d, (probs_size,), np.dtype('i4'))
-#    slices_start_h = cuda.from_device(slices_start_d, (voxels.nslices+1,), np.dtype('i4'))
-
 
     # Scan everything for compact
     scan = ExclusiveScanKernel(np.int32, "a+b", 0)
     scan(probs_addr)
-#    sensor_starts_nc_h = sensor_starts_nc.get()
-#    sensor_starts_addr_h = sensor_starts_addr.get()
-#    voxel_starts_h  = voxel_starts.get()
     scan(sensor_starts_nc)
     scan(sensor_starts_addr)
     scan(voxel_starts)
@@ -349,9 +343,6 @@ def compute_probabilites(cudaf, voxels, nsensors, sensors_per_voxel,
                    probs_addr.gpudata, np.int32(sensors_per_voxel),
                    block=(int(voxels.nslices+1), 1, 1), grid=(1, 1))
 
-#    slices_compact_h = cuda.from_device(slices_start_probs_d, (voxels.nslices+1,), np.dtype('i4'))
-#    slices_start_nc_h = cuda.from_device(slices_start_nc_d, (voxels.nslices+1,), np.dtype('i4'))
-
     compact_probs = cudaf.get_function('compact_probs')
     compact_probs(probs_nc_d, probs_d, fwd_num_d, sensors_ids_nc_d,
                   sensors_ids_d, voxels.slice_ids, probs_addr.gpudata,
@@ -359,15 +350,7 @@ def compute_probabilites(cudaf, voxels, nsensors, sensors_per_voxel,
                   nsensors, np.int32(sensors_per_voxel), sensors_response_d,
                   block=(1024, 1, 1), grid=(100, 1))
 
-
-    probs_c_h = cuda.from_device(probs_d, (probs_size,), np.dtype('f4'))
-    sensor_ids_c_h  = cuda.from_device(sensors_ids_d, (probs_size,), np.dtype('i4'))
-    slice_ids_c_h   = cuda.from_device(voxels.slice_ids, (voxels.nvoxels,), np.dtype('i4'))
-    fwd_num_h   = cuda.from_device(fwd_num_d, (probs_size,), np.dtype('f4'))
-    sensors_response_h = cuda.from_device(sensors_response_d, (nsensors*voxels.nslices,), np.dtype('f4'))
-
     sensor_starts = Scan(sensor_starts_nc.gpudata, sensor_starts_active_d, sensor_starts_addr)
-
     nprobs = voxel_starts.get()[-1]
 
     probs = ResetProbs2(nprobs, probs_d, sensors_ids_d, voxel_starts.gpudata, sensor_starts, fwd_num_d)
@@ -390,12 +373,6 @@ def compute_sensor_probs(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel
     #assumes even nsensors
     block_size = int(nsensors / 4) if nsensors > 1000 else int(nsensors)
     grid_size  = int(nslices  * 4) if nsensors > 1000 else int(nslices)
-#    grid_size  = 4
-    print("block: ", block_size)
-    print("grid: ", grid_size)
-
-    #TODO remove
-    counts = pycuda.gpuarray.zeros(int(nsensors), np.dtype('i4'))
 
     sensor_voxel_probs = cudaf.get_function('sensor_voxel_probs')
     sensor_voxel_probs(sensor_probs_d, sensor_starts.data, voxel_ids_d, np.int32(nsensors),
@@ -406,12 +383,8 @@ def compute_sensor_probs(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel
                        voxels_data_d.ymin,
                        voxels_data_d.ymax,
                        xsize, ysize, sns_param.xmin, sns_param.ymin,
-                       sns_param.step, sns_param.nbins, sns_param.params, counts.gpudata,
+                       sns_param.step, sns_param.nbins, sns_param.params,
                        block=(block_size, 1, 1), grid=(grid_size, 1))
-
-#TODO remove
-    sensor_probs_h = cuda.from_device(sensor_probs_d, (sensor_probs_size,), np.dtype('f4'))
-    voxel_ids_h = cuda.from_device(voxel_ids_d, (sensor_probs_size,), np.dtype('i4'))
 
     sensor_starts_d     = cuda.mem_alloc(int(nsensors * nslices + 1) * 4)
     sensor_starts_ids_d = cuda.mem_alloc(int(nsensors * nslices + 1) * 4)
@@ -422,9 +395,6 @@ def compute_sensor_probs(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel
                    sensor_starts.addr.gpudata, sensor_starts.active,
                    np.int32(nslices * nsensors + 1),
                   block=(block_size, 1, 1), grid=(grid_size, 1))
-
-#    sensor_starts_h     = cuda.from_device(sensor_starts_d, (num_active_sensors+1,), np.dtype('i4'))
-#    sensor_starts_ids_h = cuda.from_device(sensor_starts_ids_d, (num_active_sensors+1,), np.dtype('i4'))
 
     sensor_probs = ResetSnsProbs(sensor_probs_d, voxel_ids_d,
                                  num_active_sensors, sensor_starts_d, sensor_starts_ids_d)

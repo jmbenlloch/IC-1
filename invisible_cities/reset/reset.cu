@@ -208,7 +208,7 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 	   	int * address_voxels, float sensor_dist, float * xmins, 
 		float * xmaxs, float * ymins, float * ymaxs, float xsize, 
 		float ysize, float p_xmin, float p_ymin, float step, int nbins,
-	   	correction * corrections, int * counts){
+	   	correction * corrections){
 
 	//Compute sensor id and slice id
 	int sid, slice;
@@ -303,7 +303,6 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 			count++;
 		}
 	}
-	counts[sid] = count;
 //	printf("[%d, %d] count: %d, slice: %d, sidx: %d, voxels: %d, %d\n", blockIdx.x, threadIdx.x, count, slice, sid, start, end);
 }
 
