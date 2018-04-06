@@ -48,7 +48,7 @@ for name, attrs in (
         ('ResetSnsProbs'  , 'probs voxel_ids nsensors sensor_start sensor_start_ids'),
         ('Voxels'         , 'nslices xmin xmax ymin ymax charge'),
         ('ResetVoxels'    , 'nslices nvoxels voxels slice_ids slice_start address'),
-        ('ResetSlices'    , 'nslices start sensors charges'),
+        ('ResetSlices'    , 'nslices nsensors ncharges start sensors charges'),
         ('Measurement'    , 'value uncertainty')):
     _add_namedtuple_in_this_module(name, attrs)
 

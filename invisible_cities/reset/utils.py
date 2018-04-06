@@ -150,6 +150,8 @@ def prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm,
                     avg_charges[:nslices])
 
     slices = ResetSlices(nslices,
+                         nsipms,
+                         nsensors,
                          slices_start[:nslices+1],
                          sensor_ids  [:nsensors],
                          charges     [:nsensors])

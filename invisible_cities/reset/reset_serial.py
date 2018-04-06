@@ -63,18 +63,17 @@ def create_voxels(voxels_data, slices_start, xsize, ysize, rmax):
     return reset_voxels
 
 
-def create_anode_response(nsensors, slices):
-    total_sensors = slices.nslices * nsensors
+def create_anode_response(slices):
+    total_sensors = slices.nslices * slices.nsensors
     anode_response = np.zeros(total_sensors, dtype='f4')
 
     slice_id = 0
-    ncharges = slices.charges.shape[0]
 
-    for s in range(ncharges):
+    for s in range(slices.ncharges):
         if s >= slices.start[slice_id+1]:
             slice_id = slice_id + 1
 
-        position = slices.sensors[s] + nsensors * slice_id
+        position = slices.sensors[s] + slices.nsensors * slice_id
         anode_response[position] = slices.charges[s]
 
     return anode_response
