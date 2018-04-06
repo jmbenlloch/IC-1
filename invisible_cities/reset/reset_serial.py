@@ -1,9 +1,9 @@
-import invisible_cities.reset.reset_utils as reset
-
 import numpy as np
 import math
 import tables as tb
 from invisible_cities.evm.ic_containers import SensorsParams
+from invisible_cities.evm.ic_containers import ResetProbs2
+from invisible_cities.evm.ic_containers import ResetSnsProbs
 
 from invisible_cities.core.system_of_units import pes, mm, mus, ns
 import invisible_cities.reco.corrections    as corrf
@@ -12,31 +12,9 @@ import reset_functions_event as rstf
 
 from invisible_cities.evm.ic_containers import ResetVoxels
 
-def read_corrections_file(filename, node):
-    corr_h5 = tb.open_file(filename)
-    corr_table = getattr(corr_h5.root.ResetMap, node)
-    corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
-
-    # we need to explicitly build it to get into memory only (x,y,factor)
-    # to check: struct.unpack('f', bytes(pmts_corr.data)[i*4:(i+1)*4])
-    params = np.array(list(zip(corr_table.col('x'),
-                               corr_table.col('y'),
-                               corr_table.col('factor'))),
-                      dtype=corrections_dt)
-
-    step  =  params[1][1] - params[0][1]
-    xmin  =  params[0][0]
-    ymin  =  params[0][1]
-
-    nbins = (params[-1][0] - params[0][0]) / step + 1
-    nbins = nbins.astype('i4')
-    corr_h5.close()
-
-    return SensorsParams(xmin, ymin, step, nbins, params)
 
 def create_voxels(voxels_data, slices_start, xsize, ysize, rmax):
     max_voxels = slices_start[-1]
-    nslices = voxels_data.xmin.shape[0]
 
     nvoxels = 0
 
@@ -46,9 +24,9 @@ def create_voxels(voxels_data, slices_start, xsize, ysize, rmax):
     # One extra position to have the correct addresses after cumsum
     address    = np.zeros(max_voxels + 1, dtype='i4')
 
-    slice_start_voxels = np.zeros(nslices+1, dtype='i4')
+    slice_start_voxels = np.zeros(voxels_data.nslices+1, dtype='i4')
 
-    for slice_id in range(nslices):
+    for slice_id in range(voxels_data.nslices):
         xmin   = voxels_data.xmin[slice_id];
         xmax   = voxels_data.xmax[slice_id];
         ymin   = voxels_data.ymin[slice_id];
@@ -78,14 +56,15 @@ def create_voxels(voxels_data, slices_start, xsize, ysize, rmax):
 
     address = address.cumsum()
 
-    reset_voxels = ResetVoxels(nvoxels, voxels[:nvoxels],
+    reset_voxels = ResetVoxels(voxels_data.nslices, nvoxels, voxels[:nvoxels],
                                slice_ids[:nvoxels], slice_start_voxels,
                                address)
 
     return reset_voxels
 
-def create_anode_response(nslices, nsensors, slices):
-    total_sensors = nslices * nsensors
+
+def create_anode_response(nsensors, slices):
+    total_sensors = slices.nslices * nsensors
     anode_response = np.zeros(total_sensors, dtype='f4')
 
     slice_id = 0
@@ -106,24 +85,24 @@ def get_probability(xdist, ydist, sensor_param):
     prob_idx = xindex * sensor_param.nbins + yindex
     return sensor_param.params[prob_idx][2]
 
-def compute_probabilities_cuda(voxels, slice_ids, nvoxels, nslices, xs, ys, nsensors, sensors_per_voxel, sensor_dist, sensor_param, sensor_response):
-    probs_size = nvoxels * sensors_per_voxel
+def compute_probabilities_cuda(voxels, xs, ys, nsensors, sensors_per_voxel, sensor_dist, sensor_param, sensor_response):
+    probs_size = voxels.nvoxels * sensors_per_voxel
     sensor_ids = np.empty(probs_size, dtype='i4')
     probs      = np.empty(probs_size, dtype='f4')
     fwd_num    = np.empty(probs_size, dtype='f4')
-    voxel_starts = np.zeros(nvoxels+1, dtype='i4')
+    voxel_starts = np.zeros(voxels.nvoxels+1, dtype='i4')
 
-    sensor_starts = np.zeros(nsensors * nslices + 1, dtype='i4')
+    sensor_starts = np.zeros(nsensors * voxels.nslices + 1, dtype='i4')
 
     last_position = 0
-    for i, v in enumerate(voxels):
+    for i, v in enumerate(voxels.voxels):
         for s in range(nsensors):
             xdist = v[0] - xs[s]
             ydist = v[1] - ys[s]
             active = ((abs(xdist) <= sensor_dist) and (abs(ydist) <= sensor_dist))
             if active:
                 #print(v, s, xdist, ydist)
-                sens_idx = slice_ids[i] * nsensors + s
+                sens_idx = voxels.slice_ids[i] * nsensors + s
                 sensor_starts[sens_idx + 1] = sensor_starts[sens_idx + 1] + 1
 
                 #sensor_ids[last_position] = s
@@ -137,7 +116,11 @@ def compute_probabilities_cuda(voxels, slice_ids, nvoxels, nslices, xs, ys, nsen
 
     sensor_starts = sensor_starts.cumsum()
 
-    return probs[:last_position], sensor_ids[:last_position], voxel_starts, sensor_starts, last_position, fwd_num[:last_position]
+    probs = ResetProbs2(last_position, probs[:last_position],
+                        sensor_ids[:last_position], voxel_starts,
+                        sensor_starts, fwd_num[:last_position])
+
+    return probs
 
 def compute_probabilities(voxels, nvoxels, xs, ys, nsensors, sensors_per_voxel, sensor_dist, sensor_param, sensor_response):
     probs_size = nvoxels * sensors_per_voxel
@@ -172,22 +155,23 @@ def compute_probabilities(voxels, nvoxels, xs, ys, nsensors, sensors_per_voxel, 
 
     return probs[:last_position], sensor_ids[:last_position], voxel_starts, sensor_starts, last_position, fwd_num[:last_position]
 
-def compute_sensor_probs(probs, nprobs, nslices, nsensors, voxel_starts, sensor_starts, sensor_ids, slice_ids):
+
+def compute_sensor_probs(probs, nslices, nsensors, slice_ids):
     # offset one position to get the ending position of the last element
     sensor_counts = np.zeros(nsensors * nslices + 1, dtype='i4')
-    voxel_ids    = np.empty(nprobs, dtype='i4')
-    sensor_probs = np.empty(nprobs, dtype='f4')
+    voxel_ids    = np.empty(probs.nprobs, dtype='i4')
+    sensor_probs = np.empty(probs.nprobs, dtype='f4')
 
     vidx = 0
-    for i, p in enumerate(probs):
-        if i >= voxel_starts[vidx + 1]:
+    for i, p in enumerate(probs.probs):
+        if i >= probs.voxel_start[vidx + 1]:
             vidx = vidx + 1
 
-        sidx     = sensor_ids[i]
+        sidx     = probs.sensor_ids[i]
         slice_id = slice_ids[vidx]
 
         count = sensor_counts[sidx + 1]
-        pos   = sensor_starts[sidx] + count
+        pos   = probs.sensor_start[sidx] + count
 
         sensor_probs[pos] = p
         voxel_ids[pos] = vidx
@@ -198,41 +182,66 @@ def compute_sensor_probs(probs, nprobs, nslices, nsensors, voxel_starts, sensor_
     sensor_starts_c_ids = np.where(active_sensors)[0] - 1
     sensor_starts_c = sensor_counts.cumsum()[np.concatenate((sensor_starts_c_ids, [-1]))]
 
-    return sensor_probs, voxel_ids, sensor_starts, sensor_starts_c, sensor_starts_c_ids
+    nsensors = active_sensors.sum()
+    sns_probs = ResetSnsProbs(sensor_probs, voxel_ids,
+                              nsensors, sensor_starts_c, sensor_starts_c_ids)
+    return sns_probs
 
-def forward_denoms(nsensors, nslices, voxels, sensor_probs, voxel_ids, sensor_starts, sensor_starts_ids):
-    nsensor_active = sensor_starts_ids.shape[0]
+
+def forward_denoms(nsensors, nslices, voxels, sns_probs):
     denoms = np.zeros(nsensors * nslices, dtype='f4')
 
-    for id in np.arange(nsensor_active):
-        start = sensor_starts[id]
-        end   = sensor_starts[id+1]
+    for id in np.arange(sns_probs.nsensors):
+        start = sns_probs.sensor_start[id]
+        end   = sns_probs.sensor_start[id+1]
 
         denom = 0.
         for i in np.arange(start, end):
-            vid = voxel_ids[i]
-            denom += voxels[vid][2] * sensor_probs[i]
+            vid = sns_probs.voxel_ids[i]
+            denom += voxels[vid][2] * sns_probs.probs[i]
 
-        sid = sensor_starts_ids[id]
+        sid = sns_probs.sensor_start_ids[id]
         denoms[sid] = denom
 
     return denoms
 
-def mlem_step(voxels, nvoxels, voxel_starts, probs, sensor_ids, fwd_num, fwd_denoms):
-    #for vidx in np.arange(nvoxels):
-    for vidx in np.arange(1000):
-        start = voxel_starts[vidx]
-        end   = voxel_starts[vidx+1]
 
-        eff = 0
-        fwd = 0
-        for i in np.arange(start, end):
-            eff += probs[i]
-            sidx = sensor_ids[i]
+def mlem_step(voxels, sipm_probs, sipm_fwd_denoms, pmt_probs, pmt_fwd_denoms):
+    for vidx in np.arange(voxels.nvoxels):
+        sipm_start = sipm_probs.voxel_start[vidx]
+        sipm_end   = sipm_probs.voxel_start[vidx+1]
 
-            value = fwd_num[i] / denoms[sidx]
+        sipm_eff = 0
+        sipm_fwd = 0
+
+        for i in np.arange(sipm_start, sipm_end):
+            sipm_eff += sipm_probs.probs[i]
+            sidx = sipm_probs.sensor_ids[i]
+
+            value = sipm_probs.fwd_nums[i] / sipm_fwd_denoms[sidx]
 
             if(np.isfinite(value)):
-                fwd += value
+                sipm_fwd += value
 
-        voxels[vidx][2] = voxels[vidx][2] / eff * fwd
+        pmt_start = pmt_probs.voxel_start[vidx]
+        pmt_end   = pmt_probs.voxel_start[vidx+1]
+
+        pmt_eff = 0
+        pmt_fwd = 0
+
+        for i in np.arange(pmt_start, pmt_end):
+            pmt_eff += pmt_probs.probs[i]
+            sidx = pmt_probs.sensor_ids[i]
+
+            value = pmt_probs.fwd_nums[i] / pmt_fwd_denoms[sidx]
+
+            if(np.isfinite(value)):
+                pmt_fwd += value
+
+        voxels.voxels[vidx][2] = voxels.voxels[vidx][2] / (sipm_eff + pmt_eff) * (sipm_fwd + pmt_fwd)
+
+def compute_mlem(iterations, voxels, nsipms, sipm_probs, sipm_sns_probs, npmts, pmt_probs, pmt_sns_probs):
+    for i in np.arange(iterations):
+        sipm_fwd_denoms = forward_denoms(nsipms, voxels.nslices, voxels.voxels, sipm_sns_probs)
+        pmt_fwd_denoms  = forward_denoms(npmts,  voxels.nslices, voxels.voxels, pmt_sns_probs)
+        mlem_step(voxels, sipm_probs, sipm_fwd_denoms, pmt_probs, pmt_fwd_denoms)

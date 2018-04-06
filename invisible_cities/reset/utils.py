@@ -7,6 +7,8 @@ import invisible_cities.io.pmap_io as pmapio
 
 from invisible_cities.evm.ic_containers import Voxels
 from invisible_cities.evm.ic_containers import ResetSlices
+from invisible_cities.evm.ic_containers import SensorsParams
+
 
 import numpy as np
 import tables as tb
@@ -142,11 +144,13 @@ def prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm,
         if tbin > 4:
             break
 
-    voxels = Voxels(xmins      [:nslices], xmaxs[:nslices],
+    voxels = Voxels(nslices,
+                    xmins      [:nslices], xmaxs[:nslices],
                     ymins      [:nslices], ymaxs[:nslices],
                     avg_charges[:nslices])
 
-    slices = ResetSlices(slices_start[:nslices+1],
+    slices = ResetSlices(nslices,
+                         slices_start[:nslices+1],
                          sensor_ids  [:nsensors],
                          charges     [:nsensors])
 
@@ -184,4 +188,26 @@ def write_hdf5(voxels, slices, zs):
         voxel['E'] = v[2]
         voxel.append()
         table.flush()
+
+def read_corrections_file(filename, node):
+    corr_h5 = tb.open_file(filename)
+    corr_table = getattr(corr_h5.root.ResetMap, node)
+    corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
+
+    # we need to explicitly build it to get into memory only (x,y,factor)
+    # to check: struct.unpack('f', bytes(pmts_corr.data)[i*4:(i+1)*4])
+    params = np.array(list(zip(corr_table.col('x'),
+                               corr_table.col('y'),
+                               corr_table.col('factor'))),
+                      dtype=corrections_dt)
+
+    step  =  params[1][1] - params[0][1]
+    xmin  =  params[0][0]
+    ymin  =  params[0][1]
+
+    nbins = (params[-1][0] - params[0][0]) / step + 1
+    nbins = nbins.astype('i4')
+    corr_h5.close()
+
+    return SensorsParams(xmin, ymin, step, nbins, params)
 
