@@ -1,18 +1,16 @@
 import numpy as np
-import tables as tb
-import invisible_cities.database.load_db as dbf
-import pycuda.driver as cuda
-from pycuda.compiler import SourceModule
-from pycuda.tools import make_default_context
-from pycuda.scan import InclusiveScanKernel
-from pycuda.scan import ExclusiveScanKernel
-from pycuda import gpuarray
-import pycuda
 import math
 import os
 
-import time
 import pdb
+
+import invisible_cities.database.load_db as dbf
+
+import pycuda.driver as cuda
+from pycuda.compiler import SourceModule
+from pycuda.tools    import make_default_context
+from pycuda.scan     import ExclusiveScanKernel
+from pycuda          import gpuarray
 
 import invisible_cities.reset.utils  as rst_utils
 import invisible_cities.reset.memory as rst_mem
@@ -22,8 +20,6 @@ from invisible_cities.evm.ic_containers import ResetSnsProbs
 from invisible_cities.evm.ic_containers import Scan
 from invisible_cities.evm.ic_containers import ResetVoxels
 
-# Define types
-# due to packing the c struct has 4 bytes for the boolean (maybe pragma pack...)
 voxels_dt      = np.dtype([('x', 'f4'), ('y', 'f4'), ('E', 'f4')])
 corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
 
@@ -167,7 +163,7 @@ def create_voxels(cudaf, voxels_data_d,
     active_d       = cuda.mem_alloc(max_total_voxels)
     slice_ids_nc_d = cuda.mem_alloc(max_total_voxels * 4)
 
-    address   = pycuda.gpuarray.empty(voxels_data_d.nslices * max_voxels, np.dtype('i4'))
+    address   = gpuarray.empty(voxels_data_d.nslices * max_voxels, np.dtype('i4'))
     address_d = address.gpudata
 
     #TODO Fine tune this memalloc size
@@ -232,19 +228,19 @@ def compute_probabilites(cudaf, voxels, nsensors, sensors_per_voxel,
 
     probs_nc_d       = cuda.mem_alloc(probs_size * 4)
     probs_active_d   = cuda.mem_alloc(probs_size)
-    probs_addr       = pycuda.gpuarray.empty(probs_size+1, np.dtype('i4'))
+    probs_addr       = gpuarray.empty(probs_size+1, np.dtype('i4'))
     sensors_ids_nc_d = cuda.mem_alloc(probs_size * 4)
 
     probs_d       = cuda.mem_alloc(probs_size * 4)
     sensors_ids_d = cuda.mem_alloc(probs_size * 4)
     fwd_num_d     = cuda.mem_alloc(probs_size * 4)
 
-    voxel_starts  = pycuda.gpuarray.zeros(int(voxels.nvoxels + 1), np.dtype('i4'))
+    voxel_starts  = gpuarray.zeros(int(voxels.nvoxels + 1), np.dtype('i4'))
 
     # Sensor starts to be compacted
     total_sensors = int(nsensors * voxels.nslices)
-    sensor_starts_nc       = pycuda.gpuarray.zeros(total_sensors + 1, np.dtype('i4'))
-    sensor_starts_addr     = pycuda.gpuarray.zeros(total_sensors + 1, np.dtype('i4'))
+    sensor_starts_nc       = gpuarray.zeros(total_sensors + 1, np.dtype('i4'))
+    sensor_starts_addr     = gpuarray.zeros(total_sensors + 1, np.dtype('i4'))
     sensor_starts_active_d = cuda.mem_alloc(total_sensors+ 1)
 
     # Launch kernel
@@ -301,7 +297,7 @@ def compute_sensor_probs(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel
     active_sensor_probs_d  = cuda.mem_alloc(sensor_probs_size)
     voxel_ids_d            = cuda.mem_alloc(sensor_probs_size * 4)
     cuda.memset_d8(active_sensor_probs_d, 0, sensor_probs_size)
-    address_sensor_probs   = pycuda.gpuarray.zeros(sensor_probs_size, np.dtype('i4'))
+    address_sensor_probs   = gpuarray.zeros(sensor_probs_size, np.dtype('i4'))
     address_sensor_probs_d = address_sensor_probs.gpudata
 
     # sensor probs
@@ -354,9 +350,9 @@ def compute_mlem(cudaf, rst_voxels_d, nslices,
     voxels_per_block = 512
     blocks = math.ceil(rst_voxels_d.nvoxels / voxels_per_block)
 
-    sipm_denoms   = pycuda.gpuarray.zeros(int(nsipms * nslices), np.dtype('f4'))
+    sipm_denoms   = gpuarray.zeros(int(nsipms * nslices), np.dtype('f4'))
     sipm_denoms_d = sipm_denoms.gpudata
-    pmt_denoms    = pycuda.gpuarray.zeros(int(npmts * nslices), np.dtype('f4'))
+    pmt_denoms    = gpuarray.zeros(int(npmts * nslices), np.dtype('f4'))
     pmt_denoms_d  = pmt_denoms.gpudata
 
     forward_denom = cudaf.get_function('forward_denom')
