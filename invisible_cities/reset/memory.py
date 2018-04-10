@@ -2,9 +2,9 @@ import pycuda.driver as cuda
 import numpy as np
 
 from invisible_cities.evm.ic_containers import ResetSnsProbs
-from invisible_cities.evm.ic_containers import Scan
-from invisible_cities.evm.ic_containers import ResetProbs2
-from invisible_cities.evm.ic_containers import Voxels
+from invisible_cities.evm.ic_containers import GPUScan
+from invisible_cities.evm.ic_containers import ResetProbs
+from invisible_cities.evm.ic_containers import VoxelsLimits
 from invisible_cities.evm.ic_containers import ResetVoxels
 from invisible_cities.evm.ic_containers import ResetSlices
 
@@ -18,7 +18,7 @@ def copy_voxels_data_h2d(voxels):
     ymax_d        = cuda.to_device(voxels.ymax)
     charges_avg_d = cuda.to_device(voxels.charge)
 
-    voxels_data_d = Voxels(nslices, xmin_d, xmax_d, ymin_d, ymax_d, charges_avg_d)
+    voxels_data_d = VoxelsLimits(nslices, xmin_d, xmax_d, ymin_d, ymax_d, charges_avg_d)
     return voxels_data_d
 
 def copy_slice_data_h2d(slices):
@@ -55,9 +55,9 @@ def copy_probs_d2h(probs_d, nvoxels, nslices, nsensors):
     sensor_start_h   = cuda.from_device(probs_d.sensor_start.data,   (int(nsensors * nslices + 1),), np.dtype('i4'))
 #    sensor_start_active_h = cuda.from_device(probs_d.sensor_start.active, (int(nsensors * nslices + 1),), np.dtype('i1'))
 #    sensor_start_addr_h   = probs_d.sensor_start.addr.get()
-#    sensor_start_h = Scan(sensor_start_data_h, sensor_start_active_h, sensor_start_addr_h)
+#    sensor_start_h = GPUScan(sensor_start_data_h, sensor_start_active_h, sensor_start_addr_h)
 
-    rst_probs = ResetProbs2(nprobs, probs_h, sensor_ids_h, voxel_start_h, sensor_start_h, fwd_num_h)
+    rst_probs = ResetProbs(nprobs, probs_h, sensor_ids_h, voxel_start_h, sensor_start_h, fwd_num_h)
     return rst_probs
 
 

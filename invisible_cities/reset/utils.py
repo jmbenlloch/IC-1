@@ -5,7 +5,7 @@ import invisible_cities.database.load_db as dbf
 import invisible_cities.reco.pmaps_functions  as pmapsf
 import invisible_cities.io.pmap_io as pmapio
 
-from invisible_cities.evm.ic_containers import Voxels
+from invisible_cities.evm.ic_containers import VoxelsLimits
 from invisible_cities.evm.ic_containers import ResetSlices
 from invisible_cities.evm.ic_containers import SensorsParams
 from invisible_cities.evm.ic_containers import ResetData
@@ -84,7 +84,7 @@ def rebin_s2si(s2, s2si, rf):
     return s2d_rebin, s2sid_rebin
 
 def prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm,
-                 nsipms, sipm_thr, dist, zcorrection):
+                 nsipms, sipm_thr, dist, zcorrection, stop_slice=1e6):
     #Rebin data
     s2 = s2sis[evt].s2d[peak]
     s2si = s2sis[evt].s2sid[peak]
@@ -114,6 +114,10 @@ def prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm,
     nsensors = 0
     nslices  = 0
     for tbin, e in enumerate(s2[1]):
+        #Stop condition for testing purposes
+        if tbin > stop_slice:
+            break
+
         slice_ = pmapsfc.sipm_ids_and_charges_in_slice(s2si, tbin)
         sensors = slice_[0].shape[0]
         z      = (np.average(s2[0][tbin], weights=s2[1][tbin]) - t0)/1000.
@@ -141,11 +145,7 @@ def prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm,
             nslices  = nslices  + 1
             nsensors = nsensors + sensors
 
-        #TODO: REMOVE!!!
-        if tbin > 4:
-            break
-
-    voxels = Voxels(nslices,
+    voxels = VoxelsLimits(nslices,
                     xmins      [:nslices], xmaxs[:nslices],
                     ymins      [:nslices], ymaxs[:nslices],
                     avg_charges[:nslices])

@@ -15,9 +15,9 @@ from pycuda          import gpuarray
 import invisible_cities.reset.utils  as rst_utils
 import invisible_cities.reset.memory as rst_mem
 
-from invisible_cities.evm.ic_containers import ResetProbs2
+from invisible_cities.evm.ic_containers import ResetProbs
 from invisible_cities.evm.ic_containers import ResetSnsProbs
-from invisible_cities.evm.ic_containers import Scan
+from invisible_cities.evm.ic_containers import GPUScan
 from invisible_cities.evm.ic_containers import ResetVoxels
 
 
@@ -278,10 +278,10 @@ def compute_probabilites(cudaf, voxels, nsensors, sensors_per_voxel,
                   nsensors, np.int32(sensors_per_voxel), sensors_response_d,
                   block=(1024, 1, 1), grid=(100, 1))
 
-    sensor_starts = Scan(sensor_starts_nc.gpudata, sensor_starts_active_d, sensor_starts_addr)
+    sensor_starts = GPUScan(sensor_starts_nc.gpudata, sensor_starts_active_d, sensor_starts_addr)
     nprobs = voxel_starts.get()[-1]
 
-    probs = ResetProbs2(nprobs, probs_d, sensors_ids_d, voxel_starts.gpudata, sensor_starts, fwd_num_d)
+    probs = ResetProbs(nprobs, probs_d, sensors_ids_d, voxel_starts.gpudata, sensor_starts, fwd_num_d)
     return probs
 
 def compute_sensor_probs(cudaf, voxels, nsensors, voxels_per_sensor,

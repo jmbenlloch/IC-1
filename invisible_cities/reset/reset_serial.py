@@ -2,13 +2,12 @@ import numpy as np
 import math
 import tables as tb
 from invisible_cities.evm.ic_containers import SensorsParams
-from invisible_cities.evm.ic_containers import ResetProbs2
+from invisible_cities.evm.ic_containers import ResetProbs
 from invisible_cities.evm.ic_containers import ResetSnsProbs
 
 from invisible_cities.core.system_of_units import pes, mm, mus, ns
 import invisible_cities.reco.corrections    as corrf
 import invisible_cities.database.load_db as dbf
-import reset_functions_event as rstf
 
 from invisible_cities.evm.ic_containers import ResetVoxels
 
@@ -115,7 +114,7 @@ def compute_probabilities(voxels, xs, ys, nsensors, sensors_per_voxel, sensor_di
 
     sensor_starts = sensor_starts.cumsum()
 
-    probs = ResetProbs2(last_position, probs[:last_position],
+    probs = ResetProbs(last_position, probs[:last_position],
                         sensor_ids[:last_position], voxel_starts,
                         sensor_starts, fwd_num[:last_position])
 

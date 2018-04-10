@@ -39,20 +39,17 @@ for name, attrs in (
         ('FitFunction'    , 'fn values errors chi2 pvalue'),
         ('TriggerParams'  , 'trigger_channels min_number_channels charge height width'),
         ('PeakData'       , 'charge height width'),
+        ('Measurement'    , 'value uncertainty'),
         ('SensorsParams'  , 'xmin ymin step nbins params'),
-        ('ProbsCompact'   , 'probs sensor_ids voxel_start sensor_probs voxel_ids sensor_start'),
-        ('ProbsCompact2'  , 'probs sensor_ids voxel_start sensor_probs voxel_ids sensor_start sensor_start_ids'),
-        ('Scan'           , 'data active addr'),
-        ('ResetProbs'     , 'probs transpose compact'),
-        ('ResetProbs2'    , 'nprobs probs sensor_ids voxel_start sensor_start fwd_nums'),
+        ('GPUScan'        , 'data active addr'),
+        ('ResetProbs'     , 'nprobs probs sensor_ids voxel_start sensor_start fwd_nums'),
         ('ResetSnsProbs'  , 'probs voxel_ids nsensors sensor_start sensor_start_ids'),
-        ('Voxels'         , 'nslices xmin xmax ymin ymax charge'),
+        ('VoxelsLimits'   , 'nslices xmin xmax ymin ymax charge'),
         ('ResetRatios'    , 'sns_per_voxel voxel_per_sns'),
         ('ResetTest'      , 'voxels_ini anode cathode sipm_probs sipm_sns_probs pmt_probs pmt_sns_probs voxels'),
         ('ResetVoxels'    , 'nslices nvoxels voxels slice_ids slice_start address'),
         ('ResetData'      , 'voxels_data slices energies zs'),
-        ('ResetSlices'    , 'nslices nsensors ncharges start sensors charges'),
-        ('Measurement'    , 'value uncertainty')):
+        ('ResetSlices'    , 'nslices nsensors ncharges start sensors charges')):
     _add_namedtuple_in_this_module(name, attrs)
 
 # Leave nothing but the namedtuple types in the namespace of this module

@@ -3,7 +3,7 @@ import invisible_cities.reset.utils as rst_utils
 from invisible_cities.core.system_of_units import pes, mm, mus, ns
 import invisible_cities.reco.corrections    as corrf
 import invisible_cities.database.load_db as dbf
-import reset_functions_event as rstf
+import invisible_cities.reset.reset_gpu as rstf
 
 # Initialize RESET
 iterations = 100

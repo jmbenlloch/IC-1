@@ -1,5 +1,6 @@
 import math
-import invisible_cities.reset.reset_functions_event as rstf
+import invisible_cities.reset.reset_gpu as rstf
+import invisible_cities.reset.reset_serial as rst_serial
 import invisible_cities.reset.memory as rst_mem
 import pycuda.driver as cuda
 import pycuda
@@ -78,7 +79,8 @@ def reset_data(pmap_conf, data_sipm):
     # Take the first peak
     peak = next(iter(peaks))
     evt = 21215
-    return rst_util.prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm, nsipms, sipm_thr, dist, ZCorr)
+    total_slices = 4
+    return rst_util.prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm, nsipms, sipm_thr, dist, ZCorr, total_slices)
 
 @fixture(scope="session")
 def slices_start(reset_data):
@@ -87,7 +89,6 @@ def slices_start(reset_data):
 ##########
 # serial #
 ##########
-import invisible_cities.reset.reset_serial as rst_serial
 
 @fixture(scope="session")
 def serial_version(reset_data, slices_start, data_sipm):
