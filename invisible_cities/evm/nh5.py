@@ -233,10 +233,10 @@ class HitsTable(tb.IsDescription):
     Ec       = tb.Float64Col(pos=16)
     Zc       = tb.Float64Col(pos=17)
 
+
 class VoxelsTable(tb.IsDescription):
     event    = tb.  Int32Col(pos=0)
-    X        = tb.Float64Col(pos=1)
-    Y        = tb.Float64Col(pos=2)
-    Z        = tb.Float64Col(pos=3)
-    E        = tb.Float64Col(pos=4)
-    size     = tb.Float64Col(pos=5, shape=3)
+    X        = tb.Float32Col(pos=1)
+    Y        = tb.Float32Col(pos=2)
+    Z        = tb.Float32Col(pos=3)
+    E        = tb.Float32Col(pos=4)

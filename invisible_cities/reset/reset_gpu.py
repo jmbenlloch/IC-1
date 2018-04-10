@@ -22,10 +22,9 @@ from invisible_cities.evm.ic_containers import ResetVoxels
 
 
 class RESET:
-    def __init__(self, run_number, nsipms, npmts, dist, sipm_dist,
+    def __init__(self, data_sipm, nsipms, npmts, dist, sipm_dist,
                  pmt_dist, xsize, ysize, rmax,
                  sipm_param, pmt_param):
-        self.run_number = run_number
         self.nsipms    = np.int32(nsipms)
         self.npmts     = np.int32(npmts)
         self.dist      = np.float32(dist)
@@ -34,8 +33,8 @@ class RESET:
         self.xsize     = np.float32(xsize)
         self.ysize     = np.float32(ysize)
         self.rmax      = np.float32(rmax)
-        self.data_sipm = dbf.DataSiPM(run_number)
-        self.data_pmt  = dbf.DataPMT(run_number)
+        self.data_sipm = data_sipm
+#        self.data_pmt  = dbf.DataPMT(run_number)
         self.pitch     = 10. #hardcoded value!
 
         det_xsize = self.data_sipm.X.ptp()
@@ -55,6 +54,9 @@ class RESET:
 
     def _destroy_context(self):
         self.ctx.detach()
+
+    def __del__(self):
+        self._destroy_context()
 
     def _compile(self):
         source_file = os.path.expandvars("$ICDIR/reset/reset.cu")
@@ -106,8 +108,6 @@ class RESET:
         anode_d = create_anode_response(self.cudaf, slices_data_d)
         cath_d  = create_cath_response(energies)
 
-#        sipms_per_voxel = int(math.floor(2 * self.sipm_dist / self.pitch) + 1)**2
-#        voxels_per_sipm = int((2 * self.sipm_dist)**2 / ( self.xsize * self.ysize))
         sipm_ratios = rst_utils.compute_sipm_ratio(self.sipm_dist, self.pitch,
                                                    self.xsize, self.ysize)
         sipm_probs = compute_probabilites(self.cudaf,
@@ -125,8 +125,6 @@ class RESET:
                              self.xsize, self.ysize,
                              sipm_probs.sensor_start)
 
-#        pmts_per_voxel = self.npmts
-#        voxels_per_pmt = int((2 * self.pmt_dist)**2 / ( self.xsize * self.ysize))
         pmt_ratios = rst_utils.compute_pmt_ratio(self.pmt_dist, self.npmts,
                                                   self.xsize, self.ysize)
         pmt_probs = compute_probabilites(self.cudaf,
@@ -297,7 +295,6 @@ def compute_sensor_probs(cudaf, voxels, nsensors, voxels_per_sensor,
     address_sensor_probs   = gpuarray.zeros(sensor_probs_size, np.dtype('i4'))
     address_sensor_probs_d = address_sensor_probs.gpudata
 
-    # sensor probs
     #assumes even nsensors
     block_size = int(nsensors / 4) if nsensors > 1000 else int(nsensors)
     grid_size  = int(voxels.nslices  * 4) if nsensors > 1000 else int(voxels.nslices)

@@ -60,11 +60,10 @@ ZCorr = corrf.LifetimeCorrection(1093.77, 23.99)
 data_sipm = dbf.DataSiPM(run_number)
 
 # Prepare data
-reset_data   = rst_utils.prepare_data(s1, s2, slice_width, evt, data_sipm, nsipms, sipm_thr, dist, ZCorr)
+reset_data   = rst_utils.prepare_data(s1, s2, slice_width, data_sipm, nsipms, sipm_thr, dist, ZCorr)
 slices_start = rst_utils.slices_start(reset_data.voxels_data, x_size, y_size)
 
 
-rst = rstf.RESET(run_number, nsipms, npmts, dist, sipm_dist, pmt_dist, x_size, y_size, rmax, sipm_param, pmt_param)
+rst = rstf.RESET(data_sipm, nsipms, npmts, dist, sipm_dist, pmt_dist, x_size, y_size, rmax, sipm_param, pmt_param)
 voxels, slices = rst.run(reset_data.voxels_data, reset_data.slices, reset_data.energies, slices_start, iterations)
 rst_utils.write_hdf5(voxels, slices, reset_data.zs)
-rst._destroy_context()

@@ -785,6 +785,18 @@ class PCity(City):
         return f
 
 
+class ResetCity(PCity):
+    """A city that read pmaps and computes/writes a RESET voxels"""
+
+    parameters = tuple("""iterations nsipms npmts dist sipm_dist pmt_dist
+                       sipm_thr x_size y_size rmax rebin_factor
+                       sipm_param pmt_param""".split())
+
+    def __init__(self, **kwds):
+        super().__init__(**kwds)
+
+
+
 class KrCity(PCity):
     """A city that read pmaps and computes/writes a KrEvent"""
 

@@ -9,7 +9,7 @@ from invisible_cities.evm.ic_containers import ResetSlices
 from invisible_cities.evm.ic_containers import SensorsParams
 from invisible_cities.evm.ic_containers import ResetData
 
-
+import os
 import numpy as np
 import tables as tb
 
@@ -38,26 +38,6 @@ def refresh_selector(param_val):
                                     s2_ethr = param_val['s2_ethr'])
 
     return selector
-
-
-#def load_and_select_peaks(pmap_file, evt, select):
-#    s1_file, s2_file, s2si_file, = pmapio.load_pmaps(pmap_file)
-#
-#    common_events = set(s1_file.keys()) & set(s2_file.keys()) & set(s2si_file.keys())
-#    s1_all = dict({k:v for k,v in s1_file.items() if k in common_events})
-#    s2_all = dict({k:v for k,v in s2_file.items() if k in common_events})
-#    s2si_all =  dict({k:v for k,v in s2si_file.items() if k in common_events})
-#
-#    s1_cut = select.select_valid_peaks(s1_all[evt], select.s1_ethr, select.s1e, select.s1w, select.s1h)
-#    s2_cut = select.select_valid_peaks(s2_all[evt], select.s2_ethr, select.s2e, select.s2w, select.s2h)
-#    s2si_cut = select.select_s2si(s2si_all[evt], select.nsi)
-#
-#    s2_cut   = [peakno for peakno, v in s2_cut.items() if v == True]
-#    s2si_cut = [peakno for peakno, v in s2si_cut.items() if v == True]
-#
-#    valid_peaks = set(s2_cut) & set(s2si_cut)
-#
-#    return s1_all, s2_all, s2si_all, valid_peaks
 
 def load_and_select_peaks(pmap_file, evt, select):
     pmaps = pmapio.load_pmaps(pmap_file)
@@ -93,7 +73,7 @@ def rebin_s2si(s2, s2si, rf):
 
     return s2d_rebin, s2sid_rebin
 
-def prepare_data(s1, s2, slice_width, evt, data_sipm,
+def prepare_data(s1, s2, slice_width, data_sipm,
                  nsipms, sipm_thr, dist, zcorrection, stop_slice=1e6):
     #Rebin data
     s2_rebin = pmapsf.rebin_peak(s2, slice_width)
@@ -219,7 +199,7 @@ def write_hdf5(voxels, slices, zs):
         table.flush()
 
 def read_corrections_file(filename, node):
-    corr_h5 = tb.open_file(filename)
+    corr_h5 = tb.open_file(os.path.expandvars(filename))
     corr_table = getattr(corr_h5.root.ResetMap, node)
     corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
 

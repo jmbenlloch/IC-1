@@ -78,7 +78,7 @@ def reset_data(pmap_conf, data_sipm):
     ZCorr = corrf.LifetimeCorrection(1093.77, 23.99)
 
     total_slices = 4
-    return rst_util.prepare_data(s1, s2, slice_width, evt, data_sipm, nsipms, sipm_thr, dist, ZCorr, total_slices)
+    return rst_util.prepare_data(s1, s2, slice_width, data_sipm, nsipms, sipm_thr, dist, ZCorr, total_slices)
 
 @fixture(scope="session")
 def slices_start(reset_data):
@@ -149,7 +149,7 @@ def cuda_version(reset_data, slices_start, data_sipm):
     sipm_ratios = rst_util.compute_sipm_ratio(sipm_dist, pitch, x_size, y_size)
     pmt_ratios = rst_util.compute_pmt_ratio(pmt_dist, npmts, x_size, y_size)
 
-    rst = rstf.RESET(run_number, nsipms, npmts, dist, sipm_dist, pmt_dist,
+    rst = rstf.RESET(data_sipm, nsipms, npmts, dist, sipm_dist, pmt_dist,
                      x_size, y_size, rmax, sipm_param_file,
                      pmt_param_file)
 
