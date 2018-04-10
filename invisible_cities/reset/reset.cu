@@ -23,9 +23,6 @@ __global__ void create_voxels(voxel * voxels,
 
 	int offset = slice_start[blockIdx.x];
 	float charge = charges[blockIdx.x];
-//	if(threadIdx.x == 0){
-//		printf("[%d][%d]: start: %d\n", blockIdx.x, threadIdx.x, offset);
-//	}
 
 	int xmin = xmins[blockIdx.x];
 	int xmax = xmaxs[blockIdx.x];
@@ -36,7 +33,6 @@ __global__ void create_voxels(voxel * voxels,
 	int ysteps = (ymax - ymin) / ysize + 1;
 
 	int iterations = ceilf(1.f*(xsteps*ysteps)/blockDim.x);
-//	printf("iterations: %d\n", iterations);
 
 	for(int i=0; i<iterations; i++){
 		int vid = threadIdx.x + i*blockDim.x;
@@ -46,12 +42,9 @@ __global__ void create_voxels(voxel * voxels,
 		if(x <= xmax && y <= ymax){
 			bool active = sqrtf(x*x + y*y) < rmax;
 			voxel * v = voxels + offset + vid;
-//			printf("[%d][%d][%d]: offset %d, vid %d\n", blockIdx.x, threadIdx.x, i, offset, vid);
 			v->x = x;
 			v->y = y;
 			v->E = charge;
-			//printf("[%d][%d][%d]: pos: (%f, %f), steps: (%d, %d)\n", blockIdx.x, threadIdx.x, i, x, y, xsteps, ysteps);
-//			printf("[%d][%d][%d]: pos: (%f, %f), steps: (%d, %d)\n", blockIdx.x, threadIdx.x, i, v->x, v->y, xsteps, ysteps);
 			actives[offset + vid] = active;
 			address[offset + vid] = active;
 			slices_ids[offset + vid] = blockIdx.x;
@@ -69,11 +62,8 @@ __global__ void compact_voxels(voxel * voxels_nc, voxel * voxels,
 	int steps = end - start;
 	int iterations = ceilf(1.f*steps/blockDim.x);
 	if(threadIdx.x == 0){
-//		printf("[%d], start %d, end %d, steps %d, iterations: %d\n", blockDim.x, start, end, steps, iterations);
-		//slice_start[blockIdx.x] = address[start] - 1;
 		slice_start[blockIdx.x] = address[start];
 		if (blockIdx.x == 0){
-//			int lastSlice = slice_start_nc[gridDim.x]-1;
 			int lastSlice = slice_start_nc[gridDim.x];
 			slice_start[gridDim.x] = address[lastSlice];
 		}
@@ -84,11 +74,9 @@ __global__ void compact_voxels(voxel * voxels_nc, voxel * voxels,
 		int vidx = threadIdx.x + i*blockDim.x;
 		int offset_in = start + vidx;
 		if(offset_in < end && actives[offset_in]){
-//			int offset_out = address[offset_in] - 1;
 			int offset_out = address[offset_in];
 			voxel * v_out = voxels + offset_out;
 			voxel * v_in  = voxels_nc + offset_in;
-//			printf("[%d]: offset %d, out %d\n", blockIdx.x, offset, address[offset]);
 			v_out->x = v_in->x;
 			v_out->y = v_in->y;
 			v_out->E = v_in->E;
@@ -105,14 +93,12 @@ __global__ void create_anode_response(float * anode_response, int nsensors,
 	int steps = end - start;
 	int offset = nsensors * blockIdx.x;
 	int iterations = ceilf(1.f*steps/blockDim.x);
-//	printf("[%d]: iterations=%d, start=%d, end=%d, steps=%d, offset=%d\n", blockIdx.x, iterations, start, end, steps, offset);
 
 	for(int i=0; i<iterations; i++){
 		int step = threadIdx.x + i*blockDim.x;
 		int sidx = start + step;
 		if (step < steps){
 			int sensor_pos = offset + sensors_ids[sidx];
-//			printf("[%d]: iterations=%d, sidx=%d, sid=%d, charge=%f, pos=%d\n", blockIdx.x, iterations, sidx, sensors_ids[sidx], charges[sidx], sensor_pos);
 			anode_response[sensor_pos] = charges[sidx];
 		}
 	}
@@ -144,14 +130,10 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 		int * voxel_start, int nvoxels, int nsensors, int sensors_per_voxel, voxel * voxels,
 	   	float sensor_dist, float * xs, float * ys, float step, int nbins, float xmin, float ymin,
 	   	correction * corrections){
-	int vidx = blockIdx.x * blockDim.x + threadIdx.x;
-	//printf("[%d][%d] id: %d, nsensors: %d\n", blockIdx.x, threadIdx.x, vidx, nsensors);
 
+	int vidx = blockIdx.x * blockDim.x + threadIdx.x;
 	int base_idx = vidx * sensors_per_voxel;
 	int active_count = 0;
-
-	if(blockIdx.x == 0 && threadIdx.x == 0)
-		printf("nvoxels: %d\n", nvoxels);
 
 	//Check bounds
 	if(vidx < nvoxels){
@@ -177,13 +159,6 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 				probs[idx] = prob;
 				//sensor_ids[idx] = sidx;
 				sensor_ids[idx] = global_sidx;
-				//Increase the next one in order to get addresses after scan
-
-				if(sidx == 1352 && vidx == 2){
-					printf("voxels: [%d, %d] slice: %d, sidx: %d, voxel: %d, prob: %f\n", blockIdx.x, threadIdx.x, slice_id, sidx, vidx, prob);
-				}
-
-//				atomicAdd(last_position + nsensors*slice_id + sidx + 1, 1);
 				//The scan is excluvise (starting with 0 as neutral element)
 				//atomicAdd(sensor_starts + global_sidx + 1, 1);
 				atomicAdd(sensor_starts + global_sidx, 1);
@@ -196,7 +171,6 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 				break;
 			}
 		}
-//	voxel_start[vidx+1] = active_count;
 	//The scan is excluvise (starting with 0 as neutral element)
 	voxel_start[vidx] = active_count;
 	}
@@ -215,12 +189,8 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 	// Two blocks for 1792 sipms. 
 	// First 896 in the even block, 2nd 896 in the odd block
 	if(gridDim.x > nslices){
-//	if(1){
 		slice = blockIdx.x / 4;
 		sid = (blockIdx.x % 4) * blockDim.x + threadIdx.x;
-		// Hack to set slice 1
-//		slice = 3;
-//		sid = (blockIdx.x % 4) * blockDim.x + threadIdx.x;
 	}else{
 		slice = blockIdx.x;
 		sid = threadIdx.x;
@@ -229,17 +199,11 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 	//Compute limits to iterate over voxels
 	int xsteps = (xmaxs[slice] - xmins[slice]) / xsize + 1;
 	int ysteps = (ymaxs[slice] - ymins[slice]) / ysize + 1;
-//	printf("xsteps: %d, ysteps: %d\n", xsteps, ysteps);
 
 	int xstart = (x_sensors[sid] - sensor_dist - xmins[slice]) / xsize;
 	int xend   = (x_sensors[sid] + sensor_dist - xmins[slice]) / xsize;
 	int ystart = (y_sensors[sid] - sensor_dist - ymins[slice]) / ysize;
 	int yend   = (y_sensors[sid] + sensor_dist - ymins[slice]) / ysize;
-
-	if(blockIdx.x == 263 && threadIdx.x == 38){
-		printf("xs: %f, ys: %f, dist: %f, xmin: %f, ymin: %f, xsize: %f, ysize: %f\n", x_sensors[sid], y_sensors[sid], sensor_dist, xmins[slice], ymins[slice], xsize, ysize);
-		printf("x: (%d, %d), y: (%d, %d), steps: (%d, %d)\n", xstart, xend, ystart, yend, xsteps, ysteps);
-	}
 
 	//Correct limit if we are past the borders
 	if(xstart < 0){
@@ -255,17 +219,10 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 		yend = ysteps - 1;
 	}
 
-	if(blockIdx.x == 263 && threadIdx.x == 38){
-		printf("x: (%d, %d), y: (%d, %d), steps: (%d, %d)\n", xstart, xend, ystart, yend, xsteps, ysteps);
-	}
-
 	//Compute actual addresses
 	int offset = slice_start_nc[slice];
 	int start = offset + xstart * ysteps + ystart;
 	int end   = offset + xend   * ysteps + yend;
-	if(blockIdx.x == 263 && threadIdx.x == 38){
-		printf("sensor [%d, %d] start: %d, end: %d\n", blockIdx.x, threadIdx.x, start, end);
-	}
 
 	if(start <= end){
 		start = address_voxels[start];
@@ -273,7 +230,6 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 	}
 
 	int count = 0;
-//	printf("[%d, %d] slice: %d, sidx: %d, voxels: %d, %d\n", blockIdx.x, threadIdx.x, slice, sid, start, end);
 	int start_pos = sensor_starts[nsensors * slice + sid];
 	for(int vidx = start; vidx <= end; vidx++){
 		//Compute distance and get probability
@@ -283,27 +239,14 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 				x_sensors, y_sensors, sensor_dist, 
 				p_xmin, p_ymin, step, nbins, corrections);
 
-			if(blockIdx.x == 263 && threadIdx.x == 38){
-				printf("sensor [%d, %d] count: %d, slice: %d, sidx: %d, voxel: %d\n", blockIdx.x, threadIdx.x, count, slice, sid, vidx);
-				printf("sensor [%d, %d] start: %d, end: %d\n", blockIdx.x, threadIdx.x, start, end);
-			}
-
 		if(voxel_sensor){
 			int pos = start_pos + count;
 			probs[pos] = prob;
 			voxel_ids[pos] = vidx;			
 
-//			if(sid == 1351){
-//				printf("sensor [%d, %d] count: %d, slice: %d, sidx: %d, voxel: %d\n", blockIdx.x, threadIdx.x, count, slice, sid, vidx);
-//			}
-			if(sid == 1352 && vidx == 2){
-				printf("sensor: [%d, %d] slice: %d, sidx: %d, voxel: %d, prob: %f\n", blockIdx.x, threadIdx.x, slice, sid, vidx, prob);
-			}
-
 			count++;
 		}
 	}
-//	printf("[%d, %d] count: %d, slice: %d, sidx: %d, voxels: %d, %d\n", blockIdx.x, threadIdx.x, count, slice, sid, start, end);
 }
 
 // Launch grid<1,1> block <nslices+1, 1, 1>
@@ -358,7 +301,6 @@ __global__ void compact_sensor_start(int * starts_in, int * starts_out,
 		int block_base = i * blockDim.x;
 		int offset = grid_base + block_base + threadIdx.x;
 		if(offset < size){
-			//int addr = address[offset] - 1;  
 			int addr = address[offset];
 			if(actives[offset]){
 				starts_out[addr] = starts_in[offset];
