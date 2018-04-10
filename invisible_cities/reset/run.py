@@ -1,4 +1,5 @@
 import invisible_cities.reset.utils as rst_utils
+import os
 
 from invisible_cities.core.system_of_units import pes, mm, mus, ns
 import invisible_cities.reco.corrections    as corrf
@@ -19,11 +20,11 @@ sipm_thr   = 5.
 x_size     = 10.
 y_size     = 10.
 rmax       = 198
-slice_width = 2.
+slice_width = 2
 pmt_param  = "/home/jmbenlloch/reset_data/mapas/PMT_Map_corr_keV.h5"
 sipm_param = "/home/jmbenlloch/reset_data/mapas/SiPM_Map_corr_z0.0_keV.h5"
-
 pmap_file = '4495_21215.h5'
+pmap_file = os.path.expandvars('$ICDIR/database/test_data/reset_4495_21215.h5')
 
 pmap_conf = {}
 pmap_conf['s1_emin'] = 54 * pes
@@ -48,8 +49,9 @@ pmap_conf['s2_nsipmmin'] = 1
 pmap_conf['s2_nsipmmax'] = 1792
 
 # Read file and select peaks
+evt = 21215
 selector = rst_utils.refresh_selector(pmap_conf)
-s1s, s2s, s2sis, peaks = rst_utils.load_and_select_peaks(pmap_file, 21215, selector)
+s1, s2 = rst_utils.load_and_select_peaks(pmap_file, evt, selector)
 
 # Lifetime correction
 ZCorr = corrf.LifetimeCorrection(1093.77, 23.99)
@@ -57,13 +59,8 @@ ZCorr = corrf.LifetimeCorrection(1093.77, 23.99)
 # Sensors info
 data_sipm = dbf.DataSiPM(run_number)
 
-# Take the first peak
-peak = next(iter(peaks))
-evt = 21215
-
 # Prepare data
-#voxels, slices, energies, zs = rst_utils.prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm, nsipms, sipm_thr, dist, ZCorr)
-reset_data   = rst_utils.prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm, nsipms, sipm_thr, dist, ZCorr)
+reset_data   = rst_utils.prepare_data(s1, s2, slice_width, evt, data_sipm, nsipms, sipm_thr, dist, ZCorr)
 slices_start = rst_utils.slices_start(reset_data.voxels_data, x_size, y_size)
 
 

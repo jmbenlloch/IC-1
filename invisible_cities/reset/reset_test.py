@@ -30,7 +30,7 @@ sipm_thr   = 5.
 x_size     = 10.
 y_size     = 10.
 rmax       = 198
-slice_width = 2.
+slice_width = 2
 
 
 pmt_param_file  = os.path.expandvars('$ICDIR/database/test_data/reset_pmt_map.h5')
@@ -70,17 +70,15 @@ def data_sipm():
 @fixture(scope="session")
 def reset_data(pmap_conf, data_sipm):
     # Read file and select peaks
+    evt = 21215
     selector = rst_util.refresh_selector(pmap_conf)
-    s1s, s2s, s2sis, peaks = rst_util.load_and_select_peaks(pmap_file, 21215, selector)
+    s1, s2 = rst_util.load_and_select_peaks(pmap_file, evt, selector)
 
     # Lifetime correction
     ZCorr = corrf.LifetimeCorrection(1093.77, 23.99)
 
-    # Take the first peak
-    peak = next(iter(peaks))
-    evt = 21215
     total_slices = 4
-    return rst_util.prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm, nsipms, sipm_thr, dist, ZCorr, total_slices)
+    return rst_util.prepare_data(s1, s2, slice_width, evt, data_sipm, nsipms, sipm_thr, dist, ZCorr, total_slices)
 
 @fixture(scope="session")
 def slices_start(reset_data):
