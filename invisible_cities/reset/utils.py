@@ -1,9 +1,8 @@
 import invisible_cities.filters.s1s2_filter as s1s2filt
-import invisible_cities.reco.pmaps_functions_c  as pmapsfc
 import invisible_cities.reco.corrections    as corrf
 import invisible_cities.database.load_db as dbf
 import invisible_cities.reco.pmaps_functions  as pmapsf
-import invisible_cities.io.pmap_io as pmapio
+import invisible_cities.io.pmaps_io as pmapio
 
 from invisible_cities.evm.ic_containers import VoxelsLimits
 from invisible_cities.evm.ic_containers import ResetSlices
@@ -41,25 +40,36 @@ def refresh_selector(param_val):
     return selector
 
 
+#def load_and_select_peaks(pmap_file, evt, select):
+#    s1_file, s2_file, s2si_file, = pmapio.load_pmaps(pmap_file)
+#
+#    common_events = set(s1_file.keys()) & set(s2_file.keys()) & set(s2si_file.keys())
+#    s1_all = dict({k:v for k,v in s1_file.items() if k in common_events})
+#    s2_all = dict({k:v for k,v in s2_file.items() if k in common_events})
+#    s2si_all =  dict({k:v for k,v in s2si_file.items() if k in common_events})
+#
+#    s1_cut = select.select_valid_peaks(s1_all[evt], select.s1_ethr, select.s1e, select.s1w, select.s1h)
+#    s2_cut = select.select_valid_peaks(s2_all[evt], select.s2_ethr, select.s2e, select.s2w, select.s2h)
+#    s2si_cut = select.select_s2si(s2si_all[evt], select.nsi)
+#
+#    s2_cut   = [peakno for peakno, v in s2_cut.items() if v == True]
+#    s2si_cut = [peakno for peakno, v in s2si_cut.items() if v == True]
+#
+#    valid_peaks = set(s2_cut) & set(s2si_cut)
+#
+#    return s1_all, s2_all, s2si_all, valid_peaks
+
 def load_and_select_peaks(pmap_file, evt, select):
-    s1_file, s2_file, s2si_file, = pmapio.load_pmaps(pmap_file)
+    pmaps = pmapio.load_pmaps(pmap_file)
+    pmap = pmaps[evt]
 
-    common_events = set(s1_file.keys()) & set(s2_file.keys()) & set(s2si_file.keys())
-    s1_all = dict({k:v for k,v in s1_file.items() if k in common_events})
-    s2_all = dict({k:v for k,v in s2_file.items() if k in common_events})
-    s2si_all =  dict({k:v for k,v in s2si_file.items() if k in common_events})
+    s1_cut = select.select_s1(pmaps[21215].s1s)
+    s2_cut = select.select_s2(pmaps[21215].s2s)
 
-    s1_cut = select.select_valid_peaks(s1_all[evt], select.s1_ethr, select.s1e, select.s1w, select.s1h)
-    s2_cut = select.select_valid_peaks(s2_all[evt], select.s2_ethr, select.s2e, select.s2w, select.s2h)
-    s2si_cut = select.select_s2si(s2si_all[evt], select.nsi)
+    s1_index = np.argmax(s1_cut)
+    s2_index = np.argmax(s2_cut)
 
-    s2_cut   = [peakno for peakno, v in s2_cut.items() if v == True]
-    s2si_cut = [peakno for peakno, v in s2si_cut.items() if v == True]
-
-    valid_peaks = set(s2_cut) & set(s2si_cut)
-
-    return s1_all, s2_all, s2si_all, valid_peaks
-
+    return pmap.s1s[s1_index], pmap.s2s[s2_index]
 
 def create_voxels(data_sipm, sensor_ids, charges, dist):
     xmin = np.float32(data_sipm.X[sensor_ids].values.min()-dist)
@@ -83,19 +93,16 @@ def rebin_s2si(s2, s2si, rf):
 
     return s2d_rebin, s2sid_rebin
 
-def prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm,
+def prepare_data(s1, s2, slice_width, evt, data_sipm,
                  nsipms, sipm_thr, dist, zcorrection, stop_slice=1e6):
     #Rebin data
-    s2 = s2sis[evt].s2d[peak]
-    s2si = s2sis[evt].s2sid[peak]
-    s2, s2si = rebin_s2si(s2, s2si, slice_width)
+    s2_rebin = pmapsf.rebin_peak(s2, slice_width)
 
     #Get time
-    s1 = s1s[evt].peak_waveform(peak)
-    t0 = s1.t[np.argmax(s1.E)]
+    t0 = s1.time_at_max_energy
 
     #Alloc mem
-    max_slices = s2[1].shape[0]
+    max_slices = len(s2_rebin.times)
 
     charges    = np.empty((max_slices * nsipms), dtype='f4')
     sensor_ids = np.empty((max_slices * nsipms), dtype='i4')
@@ -113,24 +120,25 @@ def prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm,
     # Fill the arrays
     nsensors = 0
     nslices  = 0
-    for tbin, e in enumerate(s2[1]):
+    #for tbin, e in enumerate(s2[1]):
+    for tbin, t in enumerate(s2_rebin.times):
         #Stop condition for testing purposes
         if tbin > stop_slice:
             break
 
-        slice_ = pmapsfc.sipm_ids_and_charges_in_slice(s2si, tbin)
-        sensors = slice_[0].shape[0]
-        z      = (np.average(s2[0][tbin], weights=s2[1][tbin]) - t0)/1000.
-
         # Apply lifetime correction
-        charge = slice_[1] * zcorrection(z).value
-        s2e    = e * zcorrection(z).value
-        selC = (charge > sipm_thr)
+        z       = (s2_rebin.times[tbin] - t0) / 1000.
+        charge  = s2_rebin.sipms.time_slice(0) * zcorrection(z).value
+        selC    = (charge > sipm_thr)
+        charge  = charge[selC]
+        s2e     = s2_rebin.total_energy * zcorrection(z).value
+        ids     = s2_rebin.sipms.ids[selC]
+        sensors = selC.sum()
 
         if selC.any():
-            xmin, xmax, ymin, ymax, avg_charge = create_voxels(data_sipm, slice_[0][selC], charge, dist)
+            xmin, xmax, ymin, ymax, avg_charge = create_voxels(data_sipm, ids, charge, dist)
             charges   [nsensors:nsensors+sensors] = charge
-            sensor_ids[nsensors:nsensors+sensors] = slice_[0]
+            sensor_ids[nsensors:nsensors+sensors] = ids
 
             xmins[nslices] = xmin
             xmaxs[nslices] = xmax
@@ -138,7 +146,7 @@ def prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm,
             ymaxs[nslices] = ymax
             avg_charges[nslices] = avg_charge
 
-            slices_start[nslices+1] = slices_start[nslices] + charge.shape[0]
+            slices_start[nslices+1] = slices_start[nslices] + sensors
             energies    [nslices]   = s2e
             zs          [nslices]   = z
 
