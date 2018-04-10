@@ -60,14 +60,14 @@ data_sipm = dbf.DataSiPM(run_number)
 # Take the first peak
 peak = next(iter(peaks))
 evt = 21215
-sipm_thr = sipm_thr
 
 # Prepare data
-voxels, slices, energies, zs = rst_utils.prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm, nsipms, sipm_thr, dist, ZCorr)
-slices_start = rst_utils.slices_start(voxels, x_size, y_size)
+#voxels, slices, energies, zs = rst_utils.prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm, nsipms, sipm_thr, dist, ZCorr)
+reset_data   = rst_utils.prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm, nsipms, sipm_thr, dist, ZCorr)
+slices_start = rst_utils.slices_start(reset_data.voxels_data, x_size, y_size)
 
 
-rst = rstf.RESET(run_number, nsipms, npmts, dist, sipm_dist, pmt_dist, sipm_thr, x_size, y_size, rmax, sipm_param, pmt_param)
-voxels, slices = rst.run(voxels, slices, energies, slices_start, iterations)
-rst_utils.write_hdf5(voxels, slices, zs)
+rst = rstf.RESET(run_number, nsipms, npmts, dist, sipm_dist, pmt_dist, x_size, y_size, rmax, sipm_param, pmt_param)
+voxels, slices = rst.run(reset_data.voxels_data, reset_data.slices, reset_data.energies, slices_start, iterations)
+rst_utils.write_hdf5(voxels, slices, reset_data.zs)
 rst._destroy_context()

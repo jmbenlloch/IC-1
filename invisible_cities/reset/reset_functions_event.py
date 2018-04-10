@@ -20,13 +20,10 @@ from invisible_cities.evm.ic_containers import ResetSnsProbs
 from invisible_cities.evm.ic_containers import Scan
 from invisible_cities.evm.ic_containers import ResetVoxels
 
-voxels_dt      = np.dtype([('x', 'f4'), ('y', 'f4'), ('E', 'f4')])
-corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
-
 
 class RESET:
     def __init__(self, run_number, nsipms, npmts, dist, sipm_dist,
-                 pmt_dist, sipm_thr, xsize, ysize, rmax,
+                 pmt_dist, xsize, ysize, rmax,
                  sipm_param, pmt_param):
         self.run_number = run_number
         self.nsipms    = np.int32(nsipms)
@@ -34,7 +31,6 @@ class RESET:
         self.dist      = np.float32(dist)
         self.sipm_dist = np.float32(sipm_dist)
         self.pmt_dist  = np.float32(pmt_dist)
-        self.sipm_thr  = np.float32(sipm_thr)
         self.xsize     = np.float32(xsize)
         self.ysize     = np.float32(ysize)
         self.rmax      = np.float32(rmax)
@@ -97,7 +93,6 @@ class RESET:
         pass
 
     def run(self, voxels, slices, energies, slices_start, iterations):
-        self.nslices = int(voxels.xmin.shape[0])
         voxels_data_d = rst_mem.copy_voxels_data_h2d(voxels)
         slices_data_d = rst_mem.copy_slice_data_h2d(slices)
 
@@ -111,45 +106,47 @@ class RESET:
         anode_d = create_anode_response(self.cudaf, slices_data_d)
         cath_d  = create_cath_response(energies)
 
-        sipms_per_voxel = int(math.floor(2 * self.sipm_dist / self.pitch) + 1)**2
-        voxels_per_sipm = int((2 * self.sipm_dist)**2 / ( self.xsize * self.ysize))
-
+#        sipms_per_voxel = int(math.floor(2 * self.sipm_dist / self.pitch) + 1)**2
+#        voxels_per_sipm = int((2 * self.sipm_dist)**2 / ( self.xsize * self.ysize))
+        sipm_ratios = rst_utils.compute_sipm_ratio(self.sipm_dist, self.pitch,
+                                                   self.xsize, self.ysize)
         sipm_probs = compute_probabilites(self.cudaf,
-                               rst_voxels, self.nsipms, sipms_per_voxel,
+                               rst_voxels, self.nsipms, sipm_ratios.sns_per_voxel,
                                self.sipm_dist, self.xs_sipms_d,
                                self.ys_sipms_d, self.sipm_param,
                                slices_start_nc_d,
                                self.xsize, self.ysize, anode_d)
 
-        sipm_sns_probs, nprobs_sns_sipms = compute_sensor_probs(self.cudaf,
-                             rst_voxels, self.nslices, self.nsipms, sipms_per_voxel,
-                             voxels_per_sipm, self.sipm_dist, self.xs_sipms_d,
+        sipm_sns_probs = compute_sensor_probs(self.cudaf,
+                             rst_voxels, self.nsipms, sipm_ratios.voxel_per_sns,
+                             self.sipm_dist, self.xs_sipms_d,
                              self.ys_sipms_d, self.sipm_param,
                              slices_start_nc_d, voxels_data_d,
                              self.xsize, self.ysize,
                              sipm_probs.sensor_start)
 
-        pmts_per_voxel = self.npmts
-        voxels_per_pmt = int((2 * self.pmt_dist)**2 / ( self.xsize * self.ysize))
+#        pmts_per_voxel = self.npmts
+#        voxels_per_pmt = int((2 * self.pmt_dist)**2 / ( self.xsize * self.ysize))
+        pmt_ratios = rst_utils.compute_pmt_ratio(self.pmt_dist, self.npmts,
+                                                  self.xsize, self.ysize)
         pmt_probs = compute_probabilites(self.cudaf,
-                               rst_voxels, self.npmts, pmts_per_voxel,
+                               rst_voxels, self.npmts, pmt_ratios.sns_per_voxel,
                                self.pmt_dist, self.xs_pmts_d,
                                self.ys_pmts_d, self.pmt_param,
                                slices_start_nc_d,
                                self.xsize, self.ysize, anode_d)
 
-        pmt_sns_probs, nprobs_sns_pmts = compute_sensor_probs(self.cudaf,
-                             rst_voxels, self.nslices, self.npmts, pmts_per_voxel,
-                             voxels_per_pmt, self.pmt_dist, self.xs_pmts_d,
+        pmt_sns_probs = compute_sensor_probs(self.cudaf,
+                             rst_voxels, self.npmts, pmt_ratios.voxel_per_sns,
+                             self.pmt_dist, self.xs_pmts_d,
                              self.ys_pmts_d, self.pmt_param,
                              slices_start_nc_d, voxels_data_d,
                              self.xsize, self.ysize,
                              pmt_probs.sensor_start)
 
-        voxels_h = []
-        voxels_h = compute_mlem(self.cudaf, rst_voxels, self.nslices,
-                     self.npmts,  nprobs_sns_pmts,  pmt_probs, pmt_sns_probs,
-                     self.nsipms, nprobs_sns_sipms, sipm_probs, sipm_sns_probs)
+        voxels_h = compute_mlem(self.cudaf, rst_voxels, voxels_data_d.nslices,
+                     self.npmts, pmt_probs, pmt_sns_probs,
+                     self.nsipms, sipm_probs, sipm_sns_probs)
 
         return voxels_h, slice_ids_h
 
@@ -159,7 +156,7 @@ def create_voxels(cudaf, voxels_data_d,
                   nvoxels):
     # Conservative approach valid for all events
     max_total_voxels = int(voxels_data_d.nslices * max_voxels)
-    voxels_nc_d    = cuda.mem_alloc(max_total_voxels * voxels_dt.itemsize)
+    voxels_nc_d    = cuda.mem_alloc(max_total_voxels * rst_mem.voxels_dt.itemsize)
     active_d       = cuda.mem_alloc(max_total_voxels)
     slice_ids_nc_d = cuda.mem_alloc(max_total_voxels * 4)
 
@@ -167,7 +164,7 @@ def create_voxels(cudaf, voxels_data_d,
     address_d = address.gpudata
 
     #TODO Fine tune this memalloc size
-    voxels_d         = cuda.mem_alloc(max_total_voxels * voxels_dt.itemsize)
+    voxels_d         = cuda.mem_alloc(max_total_voxels * rst_mem.voxels_dt.itemsize)
     slice_ids_d      = cuda.mem_alloc(max_total_voxels * 4)
     slices_start_c_d = cuda.mem_alloc((int(voxels_data_d.nslices+1)) * 4)
 
@@ -287,11 +284,11 @@ def compute_probabilites(cudaf, voxels, nsensors, sensors_per_voxel,
     probs = ResetProbs2(nprobs, probs_d, sensors_ids_d, voxel_starts.gpudata, sensor_starts, fwd_num_d)
     return probs
 
-def compute_sensor_probs(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel, voxels_per_sensor,
+def compute_sensor_probs(cudaf, voxels, nsensors, voxels_per_sensor,
                          sensor_dist, xs_d, ys_d, sns_param,
                          slices_start_nc_d, voxels_data_d,
                          xsize, ysize, sensor_starts):
-    sensor_probs_size = int(nslices * nsensors * voxels_per_sensor)
+    sensor_probs_size = int(voxels.nslices * nsensors * voxels_per_sensor)
 
     sensor_probs_d         = cuda.mem_alloc(sensor_probs_size * 4)
     active_sensor_probs_d  = cuda.mem_alloc(sensor_probs_size)
@@ -303,12 +300,12 @@ def compute_sensor_probs(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel
     # sensor probs
     #assumes even nsensors
     block_size = int(nsensors / 4) if nsensors > 1000 else int(nsensors)
-    grid_size  = int(nslices  * 4) if nsensors > 1000 else int(nslices)
+    grid_size  = int(voxels.nslices  * 4) if nsensors > 1000 else int(voxels.nslices)
 
     sensor_voxel_probs = cudaf.get_function('sensor_voxel_probs')
     sensor_voxel_probs(sensor_probs_d, sensor_starts.data, voxel_ids_d, np.int32(nsensors),
-                       np.int32(nslices), xs_d, ys_d, rst_voxels.voxels, slices_start_nc_d,
-                       rst_voxels.address.gpudata, sensor_dist,
+                       np.int32(voxels.nslices), xs_d, ys_d, voxels.voxels, slices_start_nc_d,
+                       voxels.address.gpudata, sensor_dist,
                        voxels_data_d.xmin,
                        voxels_data_d.xmax,
                        voxels_data_d.ymin,
@@ -317,32 +314,32 @@ def compute_sensor_probs(cudaf, rst_voxels, nslices, nsensors, sensors_per_voxel
                        sns_param.step, sns_param.nbins, sns_param.params,
                        block=(block_size, 1, 1), grid=(grid_size, 1))
 
-    sensor_starts_d     = cuda.mem_alloc(int(nsensors * nslices + 1) * 4)
-    sensor_starts_ids_d = cuda.mem_alloc(int(nsensors * nslices + 1) * 4)
+    sensor_starts_d     = cuda.mem_alloc(int(nsensors * voxels.nslices + 1) * 4)
+    sensor_starts_ids_d = cuda.mem_alloc(int(nsensors * voxels.nslices + 1) * 4)
 
     num_active_sensors = sensor_starts.addr.get()[-1]
     compact_starts = cudaf.get_function('compact_sensor_start')
     compact_starts(sensor_starts.data, sensor_starts_d, sensor_starts_ids_d,
                    sensor_starts.addr.gpudata, sensor_starts.active,
-                   np.int32(nslices * nsensors + 1),
+                   np.int32(voxels.nslices * nsensors + 1),
                   block=(block_size, 1, 1), grid=(grid_size, 1))
 
     sensor_probs = ResetSnsProbs(sensor_probs_d, voxel_ids_d,
                                  num_active_sensors, sensor_starts_d, sensor_starts_ids_d)
 
-    return sensor_probs, num_active_sensors
+    return sensor_probs
 
 
 def compute_mlem(cudaf, rst_voxels_d, nslices,
-                 npmts, active_pmts, pmt_probs, pmt_sns_probs,
-                 nsipms, active_sipms, sipm_probs, sipm_sns_probs):
+                 npmts, pmt_probs, pmt_sns_probs,
+                 nsipms, sipm_probs, sipm_sns_probs):
     block_sipm = 1024
-    grid_sipm  = math.ceil(active_sipms / block_sipm)
+    grid_sipm  = math.ceil(sipm_sns_probs.nsensors / block_sipm)
     print("block sipm: ", block_sipm)
     print("grid sipm: ", grid_sipm)
 
-    block_pmt = int(active_pmts) if active_pmts < 1024 else 1024
-    grid_pmt  = math.ceil(active_pmts / block_pmt)
+    block_pmt = int(pmt_sns_probs.nsensors) if pmt_sns_probs.nsensors < 1024 else 1024
+    grid_pmt  = math.ceil(pmt_sns_probs.nsensors / block_pmt)
     print("block pmt: ", block_pmt)
     print("grid pmt: ", grid_pmt)
 
@@ -362,12 +359,14 @@ def compute_mlem(cudaf, rst_voxels_d, nslices,
     for i in range(iterations):
         forward_denom(sipm_denoms_d, sipm_sns_probs.sensor_start,
                       sipm_sns_probs.sensor_start_ids, sipm_sns_probs.probs,
-                      sipm_sns_probs.voxel_ids, rst_voxels_d.voxels, active_sipms,
+                      sipm_sns_probs.voxel_ids, rst_voxels_d.voxels,
+                      sipm_sns_probs.nsensors,
                       block=(block_sipm, 1, 1), grid=(grid_sipm, 1))
 
         forward_denom(pmt_denoms_d, pmt_sns_probs.sensor_start,
                       pmt_sns_probs.sensor_start_ids, pmt_sns_probs.probs,
-                      pmt_sns_probs.voxel_ids, rst_voxels_d.voxels, active_pmts,
+                      pmt_sns_probs.voxel_ids, rst_voxels_d.voxels,
+                      pmt_sns_probs.nsensors,
                       block=(block_pmt, 1, 1), grid=(grid_pmt, 1))
 
         mlem_step(rst_voxels_d.voxels, pmt_probs.voxel_start, pmt_probs.probs,
@@ -377,7 +376,7 @@ def compute_mlem(cudaf, rst_voxels_d, nslices,
                   np.int32(rst_voxels_d.nvoxels),
                   block=(voxels_per_block, 1, 1), grid=(blocks, 1))
 
-    voxels_h = cuda.from_device(rst_voxels_d.voxels, (rst_voxels_d.nvoxels,), voxels_dt)
+    voxels_h = cuda.from_device(rst_voxels_d.voxels, (rst_voxels_d.nvoxels,), rst_mem.voxels_dt)
     energies = np.array(list(map(lambda v: v[2], voxels_h)))
 
     return voxels_h

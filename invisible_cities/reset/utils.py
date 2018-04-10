@@ -8,6 +8,7 @@ import invisible_cities.io.pmap_io as pmapio
 from invisible_cities.evm.ic_containers import Voxels
 from invisible_cities.evm.ic_containers import ResetSlices
 from invisible_cities.evm.ic_containers import SensorsParams
+from invisible_cities.evm.ic_containers import ResetData
 
 
 import numpy as np
@@ -156,7 +157,8 @@ def prepare_data(s1s, s2s, s2sis, slice_width, evt, peak, data_sipm,
                          sensor_ids  [:nsensors],
                          charges     [:nsensors])
 
-    return voxels, slices, energies, zs
+    data = ResetData(voxels, slices, energies, zs)
+    return data
 
 
 def slices_start(voxels, xsize, ysize):
@@ -169,6 +171,23 @@ def slices_start(voxels, xsize, ysize):
     slices_start = slices_start.cumsum().astype('i4')
     return slices_start
 
+import math
+from invisible_cities.evm.ic_containers import ResetRatios
+
+def compute_sipm_ratio(sipm_dist, pitch, xsize, ysize):
+    sipms_per_voxel = int(math.floor(2 * sipm_dist / pitch) + 1)**2
+    voxels_per_sipm = int((2 * sipm_dist)**2 / (xsize * ysize))
+
+    ratios = ResetRatios(sipms_per_voxel, voxels_per_sipm)
+    return ratios
+
+
+def compute_pmt_ratio(pmt_dist, npmts, xsize, ysize):
+    pmts_per_voxel = npmts
+    voxels_per_pmt = int((2 * pmt_dist)**2 / (xsize * ysize))
+
+    ratios = ResetRatios(pmts_per_voxel, voxels_per_pmt)
+    return ratios
 
 class Voxel(tb.IsDescription):
     x = tb.Float32Col()

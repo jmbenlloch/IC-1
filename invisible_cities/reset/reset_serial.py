@@ -84,7 +84,7 @@ def get_probability(xdist, ydist, sensor_param):
     prob_idx = xindex * sensor_param.nbins + yindex
     return sensor_param.params[prob_idx][2]
 
-def compute_probabilities_cuda(voxels, xs, ys, nsensors, sensors_per_voxel, sensor_dist, sensor_param, sensor_response):
+def compute_probabilities(voxels, xs, ys, nsensors, sensors_per_voxel, sensor_dist, sensor_param, sensor_response):
     probs_size = voxels.nvoxels * sensors_per_voxel
     sensor_ids = np.empty(probs_size, dtype='i4')
     probs      = np.empty(probs_size, dtype='f4')
@@ -120,39 +120,6 @@ def compute_probabilities_cuda(voxels, xs, ys, nsensors, sensors_per_voxel, sens
                         sensor_starts, fwd_num[:last_position])
 
     return probs
-
-def compute_probabilities(voxels, nvoxels, xs, ys, nsensors, sensors_per_voxel, sensor_dist, sensor_param, sensor_response):
-    probs_size = nvoxels * sensors_per_voxel
-    sensor_ids = np.empty(probs_size, dtype='i4')
-    probs      = np.empty(probs_size, dtype='f4')
-    fwd_num    = np.empty(probs_size, dtype='f4')
-    voxel_starts = np.zeros(nvoxels+1, dtype='i4')
-
-    sensor_starts = np.zeros(nsensors * nslices + 1, dtype='i4')
-
-    last_position = 0
-    for i, v in enumerate(voxels):
-        for s in range(nsensors):
-            xdist = v[0] - xs[s]
-            ydist = v[1] - ys[s]
-            active = ((abs(xdist) <= sensor_dist) and (abs(ydist) <= sensor_dist))
-            if active:
-                #print(v, s, xdist, ydist)
-                sens_idx = slice_ids[i] * nsensors + s
-                sensor_starts[sens_idx + 1] = sensor_starts[sens_idx + 1] + 1
-
-                #sensor_ids[last_position] = s
-                sensor_ids[last_position] = sens_idx
-                prob                      = sensor_param(xdist, ydist).value
-                probs     [last_position] = prob
-                fwd_num   [last_position] = prob * sensor_response[sens_idx]
-                last_position = last_position + 1
-
-            voxel_starts[i+1] = last_position
-
-        sensor_starts = sensor_starts.cumsum()
-
-    return probs[:last_position], sensor_ids[:last_position], voxel_starts, sensor_starts, last_position, fwd_num[:last_position]
 
 
 def compute_sensor_probs(probs, nslices, nsensors, slice_ids):
