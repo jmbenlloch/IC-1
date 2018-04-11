@@ -40,12 +40,12 @@ class Reset(ResetCity):
                                               self.conf.y_size)
 
         #TODO: check param names and use dict unpacking **kwds
-        rst = rstf.RESET(self.DataSiPM, self.conf.nsipms, self.conf.npmts,
-                         self.conf.dist, self.conf.sipm_dist, self.conf.pmt_dist,
-                         self.conf.x_size, self.conf.y_size, self.conf.rmax,
-                         self.conf.sipm_param, self.conf.pmt_param)
+#        rst = rstf.RESET(self.DataSiPM, self.conf.nsipms, self.conf.npmts,
+#                         self.conf.dist, self.conf.sipm_dist, self.conf.pmt_dist,
+#                         self.conf.x_size, self.conf.y_size, self.conf.rmax,
+#                         self.conf.sipm_param, self.conf.pmt_param)
 
-        voxels, slices = rst.run(reset_data.voxels_data, reset_data.slices,
+        voxels, slices = self.rst.run(reset_data.voxels_data, reset_data.slices,
                                  reset_data.energies, slices_start,
                                  self.conf.iterations)
 

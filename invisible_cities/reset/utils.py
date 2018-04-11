@@ -108,12 +108,13 @@ def prepare_data(s1, s2, slice_width, data_sipm,
 
         # Apply lifetime correction
         z       = (s2_rebin.times[tbin] - t0) / 1000.
-        charge  = s2_rebin.sipms.time_slice(0) * zcorrection(z).value
+        charge  = s2_rebin.sipms.time_slice(tbin) * zcorrection(z).value
         selC    = (charge > sipm_thr)
         charge  = charge[selC]
         s2e     = s2_rebin.pmts.sum_over_sensors[tbin] * zcorrection(z).value
         ids     = s2_rebin.sipms.ids[selC]
         sensors = selC.sum()
+        print(sensors)
 
         if selC.any():
             xmin, xmax, ymin, ymax, avg_charge = create_voxels(data_sipm, ids, charge, dist)

@@ -142,8 +142,8 @@ class RESET:
                              self.xsize, self.ysize,
                              pmt_probs.sensor_start)
 
-        voxels_h = compute_mlem(self.cudaf, rst_voxels, voxels_data_d.nslices,
-                     self.npmts, pmt_probs, pmt_sns_probs,
+        voxels_h = compute_mlem(self.cudaf, iterations, rst_voxels,
+                     voxels_data_d.nslices, self.npmts, pmt_probs, pmt_sns_probs,
                      self.nsipms, sipm_probs, sipm_sns_probs)
 
         return voxels_h, slice_ids_h
@@ -252,9 +252,6 @@ def compute_probabilites(cudaf, voxels, nsensors, sensors_per_voxel,
                    sns_param.step, sns_param.nbins, sns_param.xmin, sns_param.ymin, sns_param.params,
                    block=(voxels_per_block, 1, 1), grid=(blocks, 1))
 
-    probs_h = cuda.from_device(probs_nc_d, (probs_size,), np.dtype('f4'))
-    probs_active_h = cuda.from_device(probs_active_d, (probs_size,), np.dtype('i1'))
-
     # Scan everything for compact
     scan = ExclusiveScanKernel(np.int32, "a+b", 0)
     scan(probs_addr)
@@ -327,7 +324,7 @@ def compute_sensor_probs(cudaf, voxels, nsensors, voxels_per_sensor,
     return sensor_probs
 
 
-def compute_mlem(cudaf, rst_voxels_d, nslices,
+def compute_mlem(cudaf, iterations, rst_voxels_d, nslices,
                  npmts, pmt_probs, pmt_sns_probs,
                  nsipms, sipm_probs, sipm_sns_probs):
     block_sipm = 1024
@@ -352,7 +349,6 @@ def compute_mlem(cudaf, rst_voxels_d, nslices,
     forward_denom = cudaf.get_function('forward_denom')
     mlem_step = cudaf.get_function('mlem_step')
 
-    iterations = 100
     for i in range(iterations):
         forward_denom(sipm_denoms_d, sipm_sns_probs.sensor_start,
                       sipm_sns_probs.sensor_start_ids, sipm_sns_probs.probs,
@@ -374,6 +370,5 @@ def compute_mlem(cudaf, rst_voxels_d, nslices,
                   block=(voxels_per_block, 1, 1), grid=(blocks, 1))
 
     voxels_h = cuda.from_device(rst_voxels_d.voxels, (rst_voxels_d.nvoxels,), rst_mem.voxels_dt)
-    energies = np.array(list(map(lambda v: v[2], voxels_h)))
 
     return voxels_h

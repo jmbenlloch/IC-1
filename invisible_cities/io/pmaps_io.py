@@ -128,7 +128,7 @@ def build_pmt_responses(pmtdf, ipmtdf):
 def build_sipm_responses(sidf):
     if len(sidf) == 0: return SiPMResponses.build_empty_instance()
 
-    sipm_ids = np.unique(sidf.nsipm.values)
+    sipm_ids = pd.unique(sidf.nsipm.values)
     enes     =           sidf.ene  .values
     n_times  = enes.size // sipm_ids.size
     enes     = enes.reshape(sipm_ids.size, n_times)
