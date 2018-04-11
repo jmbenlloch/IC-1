@@ -111,7 +111,7 @@ def prepare_data(s1, s2, slice_width, data_sipm,
         charge  = s2_rebin.sipms.time_slice(0) * zcorrection(z).value
         selC    = (charge > sipm_thr)
         charge  = charge[selC]
-        s2e     = s2_rebin.total_energy * zcorrection(z).value
+        s2e     = s2_rebin.pmts.sum_over_sensors[tbin] * zcorrection(z).value
         ids     = s2_rebin.sipms.ids[selC]
         sensors = selC.sum()
 
