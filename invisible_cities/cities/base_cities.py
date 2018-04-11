@@ -71,6 +71,11 @@ from .. filters.s1s2_filter     import S12SelectorOutput
 
 from .. daemons.idaemon         import summon_daemon
 
+import invisible_cities.reset.reset_gpu as rstf
+#import invisible_cities.reset.reset_cubin as rstf
+#import invisible_cities.reset.reset_getf as rstf
+import pdb
+
 from typing import Sequence
 
 
@@ -794,6 +799,14 @@ class ResetCity(PCity):
 
     def __init__(self, **kwds):
         super().__init__(**kwds)
+
+        #TODO: check param names and use dict unpacking **kwds
+        self.rst = rstf.RESET(self.DataSiPM, self.conf.nsipms, self.conf.npmts,
+                         self.conf.dist, self.conf.sipm_dist, self.conf.pmt_dist,
+                         self.conf.x_size, self.conf.y_size, self.conf.rmax,
+                         self.conf.sipm_param, self.conf.pmt_param)
+#        pdb.set_trace()
+
 
 
 
