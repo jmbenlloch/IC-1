@@ -159,7 +159,7 @@ def create_voxels(cudaf, scan, voxels_data_d,
     active_d       = cuda.mem_alloc(max_total_voxels)
     slice_ids_nc_d = cuda.mem_alloc(max_total_voxels * 4)
 
-    address   = gpuarray.empty(voxels_data_d.nslices * max_voxels, np.dtype('i4'))
+    address   = gpuarray.empty(max_total_voxels, np.dtype('i4'))
     address_d = address.gpudata
 
     #TODO Fine tune this memalloc size
@@ -328,15 +328,11 @@ def compute_mlem(cudaf, iterations, rst_voxels_d, nslices,
                  nsipms, sipm_probs, sipm_sns_probs):
     block_sipm = 1024
     grid_sipm  = math.ceil(sipm_sns_probs.nsensors / block_sipm)
-    print("block sipm: ", block_sipm)
-    print("grid sipm: ", grid_sipm)
 
     block_pmt = int(pmt_sns_probs.nsensors) if pmt_sns_probs.nsensors < 1024 else 1024
     grid_pmt  = math.ceil(pmt_sns_probs.nsensors / block_pmt)
-    print("block pmt: ", block_pmt)
-    print("grid pmt: ", grid_pmt)
 
-    voxels_per_block = 1024
+    # Without debugging probably could be 1024
     voxels_per_block = 512
     blocks = math.ceil(rst_voxels_d.nvoxels / voxels_per_block)
 

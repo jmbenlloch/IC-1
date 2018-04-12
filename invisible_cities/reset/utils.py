@@ -114,7 +114,6 @@ def prepare_data(s1, s2, slice_width, data_sipm,
         s2e     = s2_rebin.pmts.sum_over_sensors[tbin] * zcorrection(z).value
         ids     = s2_rebin.sipms.ids[selC]
         sensors = selC.sum()
-        print(sensors)
 
         if selC.any():
             xmin, xmax, ymin, ymax, avg_charge = create_voxels(data_sipm, ids, charge, dist)
@@ -146,7 +145,7 @@ def prepare_data(s1, s2, slice_width, data_sipm,
                          sensor_ids  [:nsensors],
                          charges     [:nsensors])
 
-    data = ResetData(voxels, slices, energies, zs)
+    data = ResetData(voxels, slices, energies[:nslices], zs[:nslices])
     return data
 
 
