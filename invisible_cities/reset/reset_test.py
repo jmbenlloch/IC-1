@@ -5,8 +5,11 @@ import invisible_cities.reset.memory as rst_mem
 import pycuda.driver as cuda
 import pycuda
 
-from pytest                 import fixture
+from pytest import fixture
+from pytest import mark
+
 import os
+import shutil
 
 import invisible_cities.reset.utils as rst_util
 import numpy as np
@@ -16,6 +19,12 @@ import invisible_cities.database.load_db as dbf
 
 from invisible_cities.evm.ic_containers import ResetTest
 from invisible_cities.evm.ic_containers import ResetVoxels
+
+import pdb
+
+#Run only if there is a CUDA installation on the machine
+cuda_present = shutil.which('nvcc')
+pytestmark = mark.skipif(not cuda_present, reason='This test requires a cuda-capable GPU')
 
 # Initialize RESET
 iterations = 100
@@ -158,7 +167,8 @@ def cuda_version(reset_data, slices_start, data_sipm):
     slices_start_nc_d = cuda.to_device(slices_start)
 
     #Create voxels
-    rst_voxels_d, slice_ids_h = rstf.create_voxels(rst.cudaf, voxels_data_d, rst.xsize,
+    rst_voxels_d, slice_ids_h = rstf.create_voxels(rst.cudaf, rst.scan,
+                                               voxels_data_d, rst.xsize,
                                                rst.ysize, rst.rmax, rst.max_voxels,
                                                slices_start_nc_d, int(slices_start[-1]))
     rst_voxels_h = rst_mem.copy_voxels_d2h(rst_voxels_d)
@@ -174,7 +184,7 @@ def cuda_version(reset_data, slices_start, data_sipm):
     cath_h   = cuda.from_device(cath_d, (nsensors,), np.dtype('f4'))
 
     #Compute probabilities for sipms
-    sipm_probs_d = rstf.compute_probabilites(rst.cudaf, rst_voxels_d,
+    sipm_probs_d = rstf.compute_probabilites(rst.cudaf, rst.scan, rst_voxels_d,
                           rst.nsipms, sipm_ratios.sns_per_voxel, rst.sipm_dist,
                           rst.xs_sipms_d, rst.ys_sipms_d, rst.sipm_param,
                           slices_start_nc_d, rst.xsize, rst.ysize, anode_d)
@@ -183,7 +193,7 @@ def cuda_version(reset_data, slices_start, data_sipm):
                                           rst_voxels_h.nslices, nsipms)
 
     #Compute probabilities for pmts
-    pmt_probs_d = rstf.compute_probabilites(rst.cudaf, rst_voxels_d,
+    pmt_probs_d = rstf.compute_probabilites(rst.cudaf, rst.scan, rst_voxels_d,
                          rst.npmts, pmt_ratios.sns_per_voxel, rst.pmt_dist,
                          rst.xs_pmts_d, rst.ys_pmts_d, rst.pmt_param,
                          slices_start_nc_d, rst.xsize, rst.ysize, cath_d)
@@ -226,7 +236,8 @@ def cuda_version(reset_data, slices_start, data_sipm):
                    sipm_sns_probs_d.nsensors,
                    block=(block_sipm, 1, 1), grid=(grid_sipm, 1))
 
-    voxels_h = rstf.compute_mlem(rst.cudaf, rst_voxels_d, voxels_data_d.nslices,
+    voxels_h = rstf.compute_mlem(rst.cudaf, iterations, rst_voxels_d,
+                             voxels_data_d.nslices,
                              rst.npmts,  pmt_probs_d,  pmt_sns_probs_d,
                              rst.nsipms, sipm_probs_d, sipm_sns_probs_d)
 
@@ -241,7 +252,6 @@ def cuda_version(reset_data, slices_start, data_sipm):
                      pmt_probs_h, pmt_sns_probs_h, voxels_h)
 
     return data
-
 
 def test_create_voxels(serial_version, cuda_version):
     voxels_s = serial_version.voxels_ini
