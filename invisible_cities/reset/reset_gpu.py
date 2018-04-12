@@ -62,6 +62,7 @@ class RESET:
         source_file = os.path.expandvars("$ICDIR/reset/reset.cu")
         kernel_code = open(source_file).read()
         self.cudaf = SourceModule(kernel_code)
+        self.scan = ExclusiveScanKernel(np.int32, "a+b", 0)
 
     def _load_xy_positions(self):
         #Get (x,y) positions
@@ -100,7 +101,7 @@ class RESET:
 
         slices_start_nc_d = cuda.to_device(slices_start)
 
-        rst_voxels, slice_ids_h = create_voxels(self.cudaf,
+        rst_voxels, slice_ids_h = create_voxels(self.cudaf, self.scan,
                       voxels_data_d, self.xsize,
                       self.ysize, self.rmax, self.max_voxels,
                       slices_start_nc_d, int(slices_start[-1]))
@@ -110,7 +111,7 @@ class RESET:
 
         sipm_ratios = rst_utils.compute_sipm_ratio(self.sipm_dist, self.pitch,
                                                    self.xsize, self.ysize)
-        sipm_probs = compute_probabilites(self.cudaf,
+        sipm_probs = compute_probabilites(self.cudaf, self.scan,
                                rst_voxels, self.nsipms, sipm_ratios.sns_per_voxel,
                                self.sipm_dist, self.xs_sipms_d,
                                self.ys_sipms_d, self.sipm_param,
@@ -127,7 +128,7 @@ class RESET:
 
         pmt_ratios = rst_utils.compute_pmt_ratio(self.pmt_dist, self.npmts,
                                                   self.xsize, self.ysize)
-        pmt_probs = compute_probabilites(self.cudaf,
+        pmt_probs = compute_probabilites(self.cudaf, self.scan,
                                rst_voxels, self.npmts, pmt_ratios.sns_per_voxel,
                                self.pmt_dist, self.xs_pmts_d,
                                self.ys_pmts_d, self.pmt_param,
@@ -149,7 +150,7 @@ class RESET:
         return voxels_h, slice_ids_h
 
 
-def create_voxels(cudaf, voxels_data_d,
+def create_voxels(cudaf, scan, voxels_data_d,
                   xsize, ysize, rmax, max_voxels, slices_start_d,
                   nvoxels):
     # Conservative approach valid for all events
@@ -177,7 +178,6 @@ def create_voxels(cudaf, voxels_data_d,
                   active_d, address_d, slice_ids_nc_d,
                   block=(1024, 1, 1), grid=(int(voxels_data_d.nslices), 1))
 
-    scan = ExclusiveScanKernel(np.int32, "a+b", 0)
     address.shape = (nvoxels + 1,)
     scan(address)
 
@@ -213,7 +213,7 @@ def create_cath_response(energies):
     cath_response_d = cuda.to_device(energies)
     return cath_response_d
 
-def compute_probabilites(cudaf, voxels, nsensors, sensors_per_voxel,
+def compute_probabilites(cudaf, scan, voxels, nsensors, sensors_per_voxel,
                          sensor_dist, xs_d, ys_d, sns_param,
                          slices_start_nc_d,
                          xsize, ysize, sensors_response_d):
@@ -253,7 +253,6 @@ def compute_probabilites(cudaf, voxels, nsensors, sensors_per_voxel,
                    block=(voxels_per_block, 1, 1), grid=(blocks, 1))
 
     # Scan everything for compact
-    scan = ExclusiveScanKernel(np.int32, "a+b", 0)
     scan(probs_addr)
     scan(sensor_starts_nc)
     scan(sensor_starts_addr)
