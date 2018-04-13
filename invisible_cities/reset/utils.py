@@ -43,8 +43,8 @@ def load_and_select_peaks(pmap_file, evt, select):
     pmaps = pmapio.load_pmaps(pmap_file)
     pmap = pmaps[evt]
 
-    s1_cut = select.select_s1(pmaps[21215].s1s)
-    s2_cut = select.select_s2(pmaps[21215].s2s)
+    s1_cut = select.select_s1(pmaps[evt].s1s)
+    s2_cut = select.select_s2(pmaps[evt].s2s)
 
     s1_index = np.argmax(s1_cut)
     s2_index = np.argmax(s2_cut)

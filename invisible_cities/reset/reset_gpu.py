@@ -39,6 +39,8 @@ class RESET:
 
         det_xsize = self.data_sipm.X.ptp()
         det_ysize = self.data_sipm.Y.ptp()
+        # If we want to use this we have to take into account "dist"
+        # something like ptp() + 2*dist
         self.max_voxels = int(det_xsize * det_ysize / (self.xsize * self.ysize))
 
         self._create_context()
@@ -103,7 +105,7 @@ class RESET:
 
         rst_voxels, slice_ids_h = create_voxels(self.cudaf, self.scan,
                       voxels_data_d, self.xsize,
-                      self.ysize, self.rmax, self.max_voxels,
+                      self.ysize, self.rmax,
                       slices_start_nc_d, int(slices_start[-1]))
 
         anode_d = create_anode_response(self.cudaf, slices_data_d)
@@ -150,21 +152,17 @@ class RESET:
         return voxels_h, slice_ids_h
 
 
-def create_voxels(cudaf, scan, voxels_data_d,
-                  xsize, ysize, rmax, max_voxels, slices_start_d,
-                  nvoxels):
-    # Conservative approach valid for all events
-    max_total_voxels = int(voxels_data_d.nslices * max_voxels)
-    voxels_nc_d    = cuda.mem_alloc(max_total_voxels * rst_mem.voxels_dt.itemsize)
-    active_d       = cuda.mem_alloc(max_total_voxels)
-    slice_ids_nc_d = cuda.mem_alloc(max_total_voxels * 4)
+def create_voxels(cudaf, scan, voxels_data_d, xsize, ysize,
+                  rmax, slices_start_d, nvoxels):
+    voxels_nc_d    = cuda.mem_alloc(nvoxels * rst_mem.voxels_dt.itemsize)
+    active_d       = cuda.mem_alloc(nvoxels)
+    slice_ids_nc_d = cuda.mem_alloc(nvoxels * 4)
 
-    address   = gpuarray.empty(max_total_voxels, np.dtype('i4'))
+    address   = gpuarray.empty(nvoxels, np.dtype('i4'))
     address_d = address.gpudata
 
-    #TODO Fine tune this memalloc size
-    voxels_d         = cuda.mem_alloc(max_total_voxels * rst_mem.voxels_dt.itemsize)
-    slice_ids_d      = cuda.mem_alloc(max_total_voxels * 4)
+    voxels_d         = cuda.mem_alloc(nvoxels * rst_mem.voxels_dt.itemsize)
+    slice_ids_d      = cuda.mem_alloc(nvoxels * 4)
     slices_start_c_d = cuda.mem_alloc((int(voxels_data_d.nslices+1)) * 4)
 
     create_voxels = cudaf.get_function('create_voxels')
@@ -222,8 +220,10 @@ def compute_probabilites(cudaf, scan, voxels, nsensors, sensors_per_voxel,
     probs_size = int(voxels.nvoxels * sensors_per_voxel)
 
     probs_nc_d       = cuda.mem_alloc(probs_size * 4)
-    probs_active_d   = cuda.mem_alloc(probs_size)
-    probs_addr       = gpuarray.empty(probs_size+1, np.dtype('i4'))
+#    probs_active_d   = cuda.mem_alloc(probs_size)
+    probs_active     = gpuarray.zeros(probs_size, np.dtype('i1'))
+    probs_active_d   = probs_active.gpudata
+    probs_addr       = gpuarray.zeros(probs_size+1, np.dtype('i4'))
     sensors_ids_nc_d = cuda.mem_alloc(probs_size * 4)
 
     probs_d       = cuda.mem_alloc(probs_size * 4)
