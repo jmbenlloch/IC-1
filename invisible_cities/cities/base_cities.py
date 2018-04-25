@@ -795,7 +795,8 @@ class ResetCity(PCity):
 
     parameters = tuple("""iterations nsipms npmts dist sipm_dist pmt_dist
                        sipm_thr x_size y_size rmax rebin_factor
-                       sipm_param pmt_param""".split())
+                       sipm_param pmt_param
+                       lifetime_corr lifetime_value lifetime_error""".split())
 
     def __init__(self, **kwds):
         super().__init__(**kwds)

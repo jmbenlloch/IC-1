@@ -29,8 +29,10 @@ class Reset(ResetCity):
         s1 = pmapVectors.pmaps.s1s[s1_index]
         s2 = pmapVectors.pmaps.s2s[s2_index]
 
-        #TODO: Get this from somewhere
-        ZCorr = corrf.LifetimeCorrection(1093.77, 23.99)
+        ZCorr = None
+        if self.conf.lifetime_corr:
+            ZCorr = corrf.LifetimeCorrection(self.conf.lifetime_value,
+                                             self.conf.lifetime_error)
 
         reset_data   = rst_utils.prepare_data(s1, s2, self.conf.rebin_factor, self.DataSiPM,
                                               self.conf.nsipms, self.conf.sipm_thr,

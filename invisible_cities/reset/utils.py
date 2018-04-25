@@ -108,10 +108,14 @@ def prepare_data(s1, s2, slice_width, data_sipm,
 
         # Apply lifetime correction
         z       = (s2_rebin.times[tbin] - t0) / 1000.
-        charge  = s2_rebin.sipms.time_slice(tbin) * zcorrection(z).value
+        correction = 1
+        if zcorrection:
+            correction = zcorrection(z).value
+        print("zcorr: ", correction)
+        charge  = s2_rebin.sipms.time_slice(tbin) * correction
         selC    = (charge > sipm_thr)
         charge  = charge[selC]
-        s2e     = s2_rebin.pmts.sum_over_sensors[tbin] * zcorrection(z).value
+        s2e     = s2_rebin.pmts.sum_over_sensors[tbin] * correction
         ids     = s2_rebin.sipms.ids[selC]
         sensors = selC.sum()
 
