@@ -37,6 +37,11 @@ class Reset(ResetCity):
         reset_data   = rst_utils.prepare_data(s1, s2, self.conf.rebin_factor, self.DataSiPM,
                                               self.conf.nsipms, self.conf.sipm_thr,
                                               self.conf.dist, ZCorr)
+
+        # Check some data has passed all the filters
+        if reset_data.slices.nslices == 0:
+            return []
+
         slices_start = rst_utils.slices_start(reset_data.voxels_data,
                                               self.conf.x_size,
                                               self.conf.y_size)
