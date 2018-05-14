@@ -772,7 +772,7 @@ class ResetCity(PCity):
 
     parameters = tuple("""iterations nsipms npmts dist sipm_dist pmt_dist
                        sipm_thr x_size y_size rmax rebin_factor
-                       sipm_param pmt_param
+                       sipm_param sipm_node pmt_param pmt_node
                        lifetime_corr lifetime_value lifetime_error""".split())
 
     def __init__(self, **kwds):
@@ -782,10 +782,8 @@ class ResetCity(PCity):
         self.rst = rstf.RESET(self.DataSiPM, self.conf.nsipms, self.conf.npmts,
                          self.conf.dist, self.conf.sipm_dist, self.conf.pmt_dist,
                          self.conf.x_size, self.conf.y_size, self.conf.rmax,
-                         self.conf.sipm_param, self.conf.pmt_param)
-#        pdb.set_trace()
-
-
+                         self.conf.sipm_param, self.conf.sipm_node,
+                         self.conf.pmt_param, self.conf.pmt_node)
 
 
 class KrCity(PCity):

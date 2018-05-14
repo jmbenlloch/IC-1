@@ -24,7 +24,7 @@ from invisible_cities.evm.ic_containers import ResetVoxels
 class RESET:
     def __init__(self, data_sipm, nsipms, npmts, dist, sipm_dist,
                  pmt_dist, xsize, ysize, rmax,
-                 sipm_param, pmt_param):
+                 sipm_param, sipm_node, pmt_param, pmt_node):
         self.nsipms    = np.int32(nsipms)
         self.npmts     = np.int32(npmts)
         self.dist      = np.float32(dist)
@@ -46,7 +46,7 @@ class RESET:
         self._create_context()
         self._compile()
         self._load_xy_positions()
-        self._load_parametrization(sipm_param, pmt_param)
+        self._load_parametrization(sipm_param, sipm_node, pmt_param, pmt_node)
 #        self._mem_allocations()
 
     def _create_context(self):
@@ -82,9 +82,9 @@ class RESET:
         self.xs_pmts_d = cuda.to_device(self.xs_pmts_h)
         self.ys_pmts_d = cuda.to_device(self.ys_pmts_h)
 
-    def _load_parametrization(self, sipm_param, pmt_param):
-        pmt_param  = rst_utils.read_corrections_file(pmt_param,  'PMT')
-        sipm_param = rst_utils.read_corrections_file(sipm_param, 'SiPM')
+    def _load_parametrization(self, sipm_param, sipm_node, pmt_param, pmt_node):
+        pmt_param  = rst_utils.read_corrections_file(pmt_param,  pmt_node)
+        sipm_param = rst_utils.read_corrections_file(sipm_param, sipm_node)
 
         pmts_corr_d  = cuda.to_device(pmt_param .params)
         sipms_corr_d = cuda.to_device(sipm_param.params)
