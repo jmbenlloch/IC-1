@@ -111,7 +111,6 @@ def prepare_data(s1, s2, slice_width, data_sipm,
         correction = 1
         if zcorrection:
             correction = zcorrection(z).value
-        print("zcorr: ", correction)
         charge  = s2_rebin.sipms.time_slice(tbin) * correction
         selC    = (charge > sipm_thr)
         charge  = charge[selC]
@@ -204,7 +203,7 @@ def write_hdf5(voxels, slices, zs):
 
 def read_corrections_file(filename, node):
     corr_h5 = tb.open_file(os.path.expandvars(filename))
-    corr_table = getattr(corr_h5.root.ResetMap, node)
+    corr_table = getattr(corr_h5.root, node)
     corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
 
     # we need to explicitly build it to get into memory only (x,y,factor)
