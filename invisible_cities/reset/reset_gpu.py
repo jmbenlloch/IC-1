@@ -108,6 +108,10 @@ class RESET:
                       self.ysize, self.rmax,
                       slices_start_nc_d, int(slices_start[-1]))
 
+        # If all voxels are filtered out, stop processing
+        if rst_voxels.nvoxels == 0:
+            return [], []
+
         anode_d = create_anode_response(self.cudaf, slices_data_d)
         cath_d  = create_cath_response(energies)
 
@@ -158,7 +162,7 @@ def create_voxels(cudaf, scan, voxels_data_d, xsize, ysize,
     active_d       = cuda.mem_alloc(nvoxels)
     slice_ids_nc_d = cuda.mem_alloc(nvoxels * 4)
 
-    address   = gpuarray.empty(nvoxels, np.dtype('i4'))
+    address   = gpuarray.empty(nvoxels+1, np.dtype('i4'))
     address_d = address.gpudata
 
     voxels_d         = cuda.mem_alloc(nvoxels * rst_mem.voxels_dt.itemsize)
@@ -176,7 +180,6 @@ def create_voxels(cudaf, scan, voxels_data_d, xsize, ysize,
                   active_d, address_d, slice_ids_nc_d,
                   block=(1024, 1, 1), grid=(int(voxels_data_d.nslices), 1))
 
-    address.shape = (nvoxels + 1,)
     scan(address)
 
     compact_voxels = cudaf.get_function('compact_voxels')
