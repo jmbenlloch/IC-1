@@ -21,12 +21,18 @@ from invisible_cities.evm.ic_containers import GPUScan
 from invisible_cities.evm.ic_containers import ResetVoxels
 
 
+EmptySnsProbs = ResetSnsProbs(np.intp(0), np.intp(0), np.int32(0), np.intp(0), np.intp(0))
+EmptyProbs    = ResetProbs(np.int32(0), np.intp(0), np.intp(0), np.intp(0), np.intp(0), np.intp(0))
+
 class RESET:
     def __init__(self, data_sipm, nsipms, npmts, dist, sipm_dist,
                  pmt_dist, xsize, ysize, rmax,
-                 sipm_param, sipm_node, pmt_param, pmt_node):
+                 sipm_param, sipm_node, pmt_param, pmt_node,
+                 use_sipms, use_pmts):
         self.nsipms    = np.int32(nsipms)
         self.npmts     = np.int32(npmts)
+        self.use_sipms = use_sipms
+        self.use_pmts  = use_pmts
         self.dist      = np.float32(dist)
         self.sipm_dist = np.float32(sipm_dist)
         self.pmt_dist  = np.float32(pmt_dist)
@@ -115,16 +121,20 @@ class RESET:
         anode_d = create_anode_response(self.cudaf, slices_data_d)
         cath_d  = create_cath_response(energies)
 
-        sipm_ratios = rst_utils.compute_sipm_ratio(self.sipm_dist, self.pitch,
+        # Variables has to be initialized independently of use_sipms
+        sipm_probs     = EmptyProbs
+        sipm_sns_probs = EmptySnsProbs
+        if self.use_sipms:
+            sipm_ratios = rst_utils.compute_sipm_ratio(self.sipm_dist, self.pitch,
                                                    self.xsize, self.ysize)
-        sipm_probs = compute_probabilites(self.cudaf, self.scan,
+            sipm_probs = compute_probabilites(self.cudaf, self.scan,
                                rst_voxels, self.nsipms, sipm_ratios.sns_per_voxel,
                                self.sipm_dist, self.xs_sipms_d,
                                self.ys_sipms_d, self.sipm_param,
                                slices_start_nc_d,
                                self.xsize, self.ysize, anode_d)
 
-        sipm_sns_probs = compute_sensor_probs(self.cudaf,
+            sipm_sns_probs = compute_sensor_probs(self.cudaf,
                              rst_voxels, self.nsipms, sipm_ratios.voxel_per_sns,
                              self.sipm_dist, self.xs_sipms_d,
                              self.ys_sipms_d, self.sipm_param,
@@ -132,16 +142,20 @@ class RESET:
                              self.xsize, self.ysize,
                              sipm_probs.sensor_start)
 
-        pmt_ratios = rst_utils.compute_pmt_ratio(self.pmt_dist, self.npmts,
+        # Variables has to be initialized independently of use_pmts
+        pmt_probs     = EmptyProbs
+        pmt_sns_probs = EmptySnsProbs
+        if self.use_pmts:
+            pmt_ratios = rst_utils.compute_pmt_ratio(self.pmt_dist, self.npmts,
                                                   self.xsize, self.ysize)
-        pmt_probs = compute_probabilites(self.cudaf, self.scan,
+            pmt_probs = compute_probabilites(self.cudaf, self.scan,
                                rst_voxels, self.npmts, pmt_ratios.sns_per_voxel,
                                self.pmt_dist, self.xs_pmts_d,
                                self.ys_pmts_d, self.pmt_param,
                                slices_start_nc_d,
                                self.xsize, self.ysize, anode_d)
 
-        pmt_sns_probs = compute_sensor_probs(self.cudaf,
+            pmt_sns_probs = compute_sensor_probs(self.cudaf,
                              rst_voxels, self.npmts, pmt_ratios.voxel_per_sns,
                              self.pmt_dist, self.xs_pmts_d,
                              self.ys_pmts_d, self.pmt_param,
@@ -150,8 +164,9 @@ class RESET:
                              pmt_probs.sensor_start)
 
         voxels_h = compute_mlem(self.cudaf, iterations, rst_voxels,
-                     voxels_data_d.nslices, self.npmts, pmt_probs, pmt_sns_probs,
-                     self.nsipms, sipm_probs, sipm_sns_probs)
+                     voxels_data_d.nslices,
+                     self.use_pmts, self.npmts, pmt_probs, pmt_sns_probs,
+                     self.use_sipms, self.nsipms, sipm_probs, sipm_sns_probs)
 
         return voxels_h, slice_ids_h
 
@@ -327,34 +342,41 @@ def compute_sensor_probs(cudaf, voxels, nsensors, voxels_per_sensor,
 
 
 def compute_mlem(cudaf, iterations, rst_voxels_d, nslices,
-                 npmts, pmt_probs, pmt_sns_probs,
-                 nsipms, sipm_probs, sipm_sns_probs):
-    block_sipm = 1024
-    grid_sipm  = math.ceil(sipm_sns_probs.nsensors / block_sipm)
+                 use_pmts, npmts, pmt_probs, pmt_sns_probs,
+                 use_sipms, nsipms, sipm_probs, sipm_sns_probs):
+    block_sipm = grid_sipm = 0
+    sipm_denoms_d = np.intp(0)
+    if use_sipms:
+        block_sipm = 1024
+        grid_sipm  = math.ceil(sipm_sns_probs.nsensors / block_sipm)
+        sipm_denoms   = gpuarray.zeros(int(nsipms * nslices), np.dtype('f4'))
+        sipm_denoms_d = sipm_denoms.gpudata
 
-    block_pmt = int(pmt_sns_probs.nsensors) if pmt_sns_probs.nsensors < 1024 else 1024
-    grid_pmt  = math.ceil(pmt_sns_probs.nsensors / block_pmt)
+    block_pmt = grid_pmt = 0
+    pmt_denoms_d = np.intp(0)
+    if use_pmts:
+        block_pmt = int(pmt_sns_probs.nsensors) if pmt_sns_probs.nsensors < 1024 else 1024
+        grid_pmt  = math.ceil(pmt_sns_probs.nsensors / block_pmt)
+        pmt_denoms    = gpuarray.zeros(int(npmts * nslices), np.dtype('f4'))
+        pmt_denoms_d  = pmt_denoms.gpudata
 
     # Without debugging probably could be 1024
     voxels_per_block = 512
     blocks = math.ceil(rst_voxels_d.nvoxels / voxels_per_block)
 
-    sipm_denoms   = gpuarray.zeros(int(nsipms * nslices), np.dtype('f4'))
-    sipm_denoms_d = sipm_denoms.gpudata
-    pmt_denoms    = gpuarray.zeros(int(npmts * nslices), np.dtype('f4'))
-    pmt_denoms_d  = pmt_denoms.gpudata
-
     forward_denom = cudaf.get_function('forward_denom')
     mlem_step = cudaf.get_function('mlem_step')
 
     for i in range(iterations):
-        forward_denom(sipm_denoms_d, sipm_sns_probs.sensor_start,
+        if use_sipms:
+            forward_denom(sipm_denoms_d, sipm_sns_probs.sensor_start,
                       sipm_sns_probs.sensor_start_ids, sipm_sns_probs.probs,
                       sipm_sns_probs.voxel_ids, rst_voxels_d.voxels,
                       sipm_sns_probs.nsensors,
                       block=(block_sipm, 1, 1), grid=(grid_sipm, 1))
 
-        forward_denom(pmt_denoms_d, pmt_sns_probs.sensor_start,
+        if use_pmts:
+            forward_denom(pmt_denoms_d, pmt_sns_probs.sensor_start,
                       pmt_sns_probs.sensor_start_ids, pmt_sns_probs.probs,
                       pmt_sns_probs.voxel_ids, rst_voxels_d.voxels,
                       pmt_sns_probs.nsensors,

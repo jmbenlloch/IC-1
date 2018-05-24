@@ -346,31 +346,37 @@ __global__ void mlem_step(voxel * voxels, int * pmt_voxel_starts,
 	float sipm_fwd = 0;
 
 	if(vidx < size){
-		int sipm_start = sipm_voxel_starts[vidx];
-		int sipm_end   = sipm_voxel_starts[vidx+1];
+		// If sipms shouldn't be considered, the pointer would be null
+		if (sipm_voxel_starts){
+			int sipm_start = sipm_voxel_starts[vidx];
+			int sipm_end   = sipm_voxel_starts[vidx+1];
 
-		for(int i=sipm_start; i<sipm_end; i++){
-			sipm_eff += sipm_probs[i];
-			int sidx = sipm_sensor_ids[i];
+			for(int i=sipm_start; i<sipm_end; i++){
+				sipm_eff += sipm_probs[i];
+				int sidx = sipm_sensor_ids[i];
 
-			// Check for nans
-			float value = sipm_nums[i] / sipm_denoms[sidx];
-			if(isfinite(value)){
-				sipm_fwd += value;
+				// Check for nans
+				float value = sipm_nums[i] / sipm_denoms[sidx];
+				if(isfinite(value)){
+					sipm_fwd += value;
+				}
 			}
 		}
 
-		int pmt_start = pmt_voxel_starts[vidx];
-		int pmt_end   = pmt_voxel_starts[vidx+1];
+		// If pmts shouldn't be considered, the pointer would be null
+		if (pmt_voxel_starts){
+			int pmt_start = pmt_voxel_starts[vidx];
+			int pmt_end   = pmt_voxel_starts[vidx+1];
 
-		for(int i=pmt_start; i<pmt_end; i++){
-			pmt_eff += pmt_probs[i];
-			int sidx = pmt_sensor_ids[i];
+			for(int i=pmt_start; i<pmt_end; i++){
+				pmt_eff += pmt_probs[i];
+				int sidx = pmt_sensor_ids[i];
 
-			// Check for nans
-			float value = pmt_nums[i] / pmt_denoms[sidx];
-			if(isfinite(value)){
-				pmt_fwd += value;
+				// Check for nans
+				float value = pmt_nums[i] / pmt_denoms[sidx];
+				if(isfinite(value)){
+					pmt_fwd += value;
+				}
 			}
 		}
 
