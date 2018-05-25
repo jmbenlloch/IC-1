@@ -153,7 +153,7 @@ class RESET:
                                self.pmt_dist, self.xs_pmts_d,
                                self.ys_pmts_d, self.pmt_param,
                                slices_start_nc_d,
-                               self.xsize, self.ysize, anode_d)
+                               self.xsize, self.ysize, cath_d)
 
             pmt_sns_probs = compute_sensor_probs(self.cudaf,
                              rst_voxels, self.npmts, pmt_ratios.voxel_per_sns,
