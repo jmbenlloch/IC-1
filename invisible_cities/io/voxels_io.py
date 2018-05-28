@@ -1,4 +1,5 @@
 from invisible_cities.evm.nh5 import VoxelsTable
+from invisible_cities.evm.nh5 import EventInfo
 from invisible_cities.evm.nh5 import ResetDstTable
 from .  table_io              import make_table
 
@@ -13,6 +14,13 @@ def voxels_writer(hdf5_file, *, compression='ZLIB4'):
     # Mark column to index after populating table
     voxels_table.set_attr('columns_to_index', ['event'])
 
+    events_table  = make_table(hdf5_file,
+                             group       = 'Run',
+                             name        = 'Events',
+                             fformat     = EventInfo,
+                             description = 'Event numbers',
+                             compression = compression)
+
     def write_voxels(voxels):
         for v in voxels:
             row = voxels_table.row
@@ -21,6 +29,13 @@ def voxels_writer(hdf5_file, *, compression='ZLIB4'):
             row["Y"    ] = v['y']
             row["Z"    ] = v['z']
             row["E"    ] = v['E']
+            row.append()
+
+        #If there are voxels, write event number
+        if voxels:
+            row = events_table.row
+            row["evt_number"] = voxels[0]['event']
+            row["timestamp"]  = 0
             row.append()
 
     return write_voxels
