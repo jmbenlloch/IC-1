@@ -12,8 +12,7 @@ from invisible_cities.evm.ic_containers import ResetData
 import os
 import numpy as np
 import tables as tb
-
-import pdb
+import pandas as pd
 
 def refresh_selector(param_val):
     selector = s1s2filt.S12Selector(s1_nmin = param_val['s1_num'],
@@ -223,3 +222,23 @@ def read_corrections_file(filename, node):
 
     return SensorsParams(xmin, ymin, step, nbins, params)
 
+
+def produce_reset_dst(filein, zcorrection):
+    h5in = tb.open_file(filein)
+
+    events = pd.DataFrame.from_records(h5in.root.RECO.Events.read())
+    xs = events.X.values
+    ys = events.Y.values
+    zs = events.Z.values
+    es = events.E.values
+
+    e_corrected = es * zcorrection(zs, xs, ys).value
+    events['Ecorr'] = e_corrected
+
+    energies = events[['event', 'E', 'Ecorr']].groupby('event').sum()
+    mins = events[['event', 'X', 'Y', 'Z']].groupby('event').min().add_suffix('min')
+    maxs = events[['event', 'X', 'Y', 'Z']].groupby('event').max().add_suffix('max')
+    dst = mins.join(maxs).join(energies)
+    h5in.close()
+
+    return dst

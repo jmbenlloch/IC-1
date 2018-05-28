@@ -209,3 +209,14 @@ class VoxelsTable(tb.IsDescription):
     Y        = tb.Float32Col(pos=2)
     Z        = tb.Float32Col(pos=3)
     E        = tb.Float32Col(pos=4)
+
+class ResetDstTable(tb.IsDescription):
+    evt   = tb.  Int32Col(pos=0)
+    Xmin  = tb.Float32Col(pos=1)
+    Xmax  = tb.Float32Col(pos=2)
+    Ymin  = tb.Float32Col(pos=3)
+    Ymax  = tb.Float32Col(pos=4)
+    Zmin  = tb.Float32Col(pos=5)
+    Zmax  = tb.Float32Col(pos=6)
+    E     = tb.Float32Col(pos=7)
+    Ecorr = tb.Float32Col(pos=8)
