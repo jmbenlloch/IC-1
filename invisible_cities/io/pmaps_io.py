@@ -95,6 +95,46 @@ def _build_ipmtdf_from_sumdf(sumdf):
     ipmtdf['npmt'] = -1
     return ipmtdf
 
+def load_pmaps2(filename):
+    pmap_dict = {}
+
+    with tb.open_file(filename, 'r') as h5f:
+        pmap = h5f.root.PMAPS
+        to_df = pd.DataFrame.from_records
+
+        s1_evts = h5f.root.PMAPS.S1.cols.event[:]
+        s2_evts = h5f.root.PMAPS.S2.cols.event[:]
+        event_numbers = set.union(set(s1_evts), set(s2_evts))
+
+        s1_table    = h5f.root.PMAPS.S1
+        s2_table    = h5f.root.PMAPS.S2
+        s2si_table  = h5f.root.PMAPS.S2Si
+        s1pmt_table = h5f.root.PMAPS.S1Pmt if 'S1Pmt' in pmap else None
+        s2pmt_table = h5f.root.PMAPS.S2Pmt if 'S2Pmt' in pmap else None
+
+        for event_number in event_numbers:
+            evt_filter = '(event == {})'.format(event_number)
+            s1df    = to_df(s1_table   .read_where(evt_filter))
+            s2df    = to_df(s2_table   .read_where(evt_filter))
+            sidf    = to_df(s2si_table .read_where(evt_filter))
+
+            if s1pmt_table is None:
+                s1pmtdf = _build_ipmtdf_from_sumdf(s1df)
+            else:
+                s1pmtdf = to_df(s1pmt_table.read_where(evt_filter))
+
+            if s2pmt_table is None:
+                s2pmtdf = _build_ipmtdf_from_sumdf(s2df)
+            else:
+                s2pmtdf = to_df(s2pmt_table.read_where(evt_filter))
+
+            s1s = s1s_from_df(s1df, s1pmtdf)
+            s2s = s2s_from_df(s2df, s2pmtdf, sidf)
+
+            pmap_dict[event_number] = PMap(s1s, s2s)
+
+    return pmap_dict
+
 
 def load_pmaps(filename):
     pmap_dict = {}
