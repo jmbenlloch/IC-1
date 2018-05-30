@@ -223,7 +223,7 @@ def read_corrections_file(filename, node):
     return SensorsParams(xmin, ymin, step, nbins, params)
 
 
-def produce_reset_dst(filein, zcorrection):
+def produce_reset_dst_old(filein, zcorrection):
     h5in = tb.open_file(filein)
 
     events = pd.DataFrame.from_records(h5in.root.RECO.Events.read())
@@ -242,3 +242,33 @@ def produce_reset_dst(filein, zcorrection):
     h5in.close()
 
     return dst
+
+def produce_reset_dst(filein, zcorrection):
+    h5in = tb.open_file(filein)
+    evt_numbers = h5in.root.Run.Events.cols.evt_number[:]
+    evt_table = h5in.root.RECO.Events
+    dsts = []
+    for event_number in evt_numbers:
+        evt_filter = '(event == {})'.format(event_number)
+        data = pd.DataFrame.from_records(evt_table.read_where(evt_filter))
+
+        xs = data.X.values
+        ys = data.Y.values
+        zs = data.Z.values
+        es = data.E.values
+
+        e_corrected = es * zcorrection(zs, xs, ys).value
+        data['Ecorr'] = e_corrected
+
+        energies = data[['event', 'E', 'Ecorr']].groupby('event').sum()
+        mins = data[['event', 'X', 'Y', 'Z']].groupby('event').min().add_suffix('min')
+        maxs = data[['event', 'X', 'Y', 'Z']].groupby('event').max().add_suffix('max')
+        dst = mins.join(maxs).join(energies)
+        dsts.append(dst)
+
+    h5in.close()
+
+    dst = pd.concat(dsts)
+
+    return dst
+
