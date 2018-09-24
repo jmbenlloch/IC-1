@@ -22,6 +22,7 @@ def voxels_writer(hdf5_file, *, compression='ZLIB4'):
                              compression = compression)
 
     def write_voxels(voxels):
+        print("write_voxels: ", len(voxels))
         for v in voxels:
             row = voxels_table.row
             row["event"] = v['event']
@@ -32,7 +33,7 @@ def voxels_writer(hdf5_file, *, compression='ZLIB4'):
             row.append()
 
         #If there are voxels, write event number
-        if voxels:
+        if voxels.shape[0]:
             row = events_table.row
             row["evt_number"] = voxels[0]['event']
             row["timestamp"]  = 0
