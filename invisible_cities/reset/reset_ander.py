@@ -1,6 +1,7 @@
 import numpy as np
 import tables as tb
 import numba
+import scipy
 
 def CreateVoxels(DataSiPM, sens_id, sens_q, point_dist, sipm_thr, sizeX, sizeY, rMax):
     voxX = []
@@ -89,6 +90,10 @@ def MLEM_step(voxDX, voxDY, oldVox, selVox, selSens, anode_response, cath_respon
     if fCathode:
         cathForward = ComputeCathForward(oldVox, cath_response, pmt_prob)
 
+    cath_lhood  = compute_likelihood(cathForward, cath_response)
+    anode_lhood = compute_likelihood(anodeForward, anode_response)
+    likelihood = cath_lhood + anode_lhood
+
     for j in range(len(oldVox[0])):
         if oldVox[2][j] <= 0:
             newVoxE.append(0.)
@@ -128,35 +133,13 @@ def MLEM_step(voxDX, voxDY, oldVox, selVox, selSens, anode_response, cath_respon
         newVoxX.append(oldVox[0,j])
         newVoxY.append(oldVox[1,j])
 
-    return np.array([newVoxX, newVoxY, newVoxE])
+    return np.array([newVoxX, newVoxY, newVoxE]), likelihood
 
 
-# # Writer
-class ResetDST(tb.IsDescription):
-    evt = tb.UInt32Col (pos=0)
-    x   = tb.Float64Col(pos=1)
-    y   = tb.Float64Col(pos=2)
-    z   = tb.Float64Col(pos=3)
-    E   = tb.Float64Col(pos=4)
-    #Iteration = tb.UInt32Col(pos=5)
-
-
-def map_writer(hdf5_file, table_name, *, compression='ZLIB4'):
-    map_table  = make_table(hdf5_file,
-                            group       = 'ResetMap',
-                            name        = table_name,
-                            fformat     = ResetDST,
-                            description = 'Reset dst',
-                            compression = compression)
-
-    def write_map(evt, x, y, z, E):
-        row = map_table.row
-        row["evt"] = evt
-        row["x"  ] = x
-        row["y"  ] = y
-        row["z"  ] = z
-        row["E"  ] = E
-        row.append()
-
-    return write_map
-
+def compute_likelihood(forward_proj, sns_response):
+    if sns_response.ndim > 1:
+        sns_response = sns_response[:,1]
+    likelihood = -forward_proj + sns_response * np.log(forward_proj) - np.real(scipy.special.loggamma(sns_response + 1))
+    nans = np.isinf(likelihood)
+    likelihood[nans] = 0
+    return likelihood.sum()

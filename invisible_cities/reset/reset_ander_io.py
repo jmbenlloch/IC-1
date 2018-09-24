@@ -26,11 +26,11 @@ def reset_voxels_writer(hdf5_file, table_name, *, compression='ZLIB4'):
 
     def write_voxels(evt, x, y, z, E):
         row = map_table.row
-        row["evt"] = evt
-        row["x"  ] = x
-        row["y"  ] = y
-        row["z"  ] = z
-        row["E"  ] = E
+        row["event"] = evt
+        row["x"  ]   = x
+        row["y"  ]   = y
+        row["z"  ]   = z
+        row["E"  ]   = E
         row.append()
 
     return write_voxels

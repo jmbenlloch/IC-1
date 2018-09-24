@@ -3,49 +3,17 @@ import invisible_cities.reco.dst_functions as dstf
 import invisible_cities.io.pmaps_io as pio
 import invisible_cities.reco.pmaps_functions  as pmapsf
 
-import invisible_cities.reset.reset_ander as rst_ander
+import invisible_cities.reset.reset_ander    as rst_ander
+import invisible_cities.reset.reset_ander_io as rst_io
 
 from invisible_cities.icaro.hst_functions import hist2d
 from invisible_cities.icaro.hst_functions import labels
-from invisible_cities.io.table_io import make_table
 
 
 import numpy as np
 import tables as tb
 import numba
 import matplotlib.pylab as plt
-
-
-# # Writer
-class ResetDST(tb.IsDescription):
-    evt = tb.UInt32Col (pos=0)
-    x   = tb.Float64Col(pos=1)
-    y   = tb.Float64Col(pos=2)
-    z   = tb.Float64Col(pos=3)
-    E   = tb.Float64Col(pos=4)
-    #Iteration = tb.UInt32Col(pos=5)
-
-
-def map_writer(hdf5_file, table_name, *, compression='ZLIB4'):
-    map_table  = make_table(hdf5_file,
-                            group       = 'ResetMap',
-                            name        = table_name,
-                            fformat     = ResetDST,
-                            description = 'Reset dst',
-                            compression = compression)
-
-    def write_map(evt, x, y, z, E):
-        row = map_table.row
-        row["evt"] = evt
-        row["x"  ] = x
-        row["y"  ] = y
-        row["z"  ] = z
-        row["E"  ] = E
-        row.append()
-
-    return write_map
-
-
 
 ##########
 # Params #
@@ -77,11 +45,12 @@ sipm_xy_map = dstf.load_xy_corrections(param_file, group="ResetMap", node="SiPM"
 pmt_xy_map  = dstf.load_xy_corrections(param_file, group="ResetMap", node="PMT")
 
 with tb.open_file(output_file, 'w') as h5out:
-    write_reset = map_writer(h5out, 'RESET')
+    write_reset = rst_io.reset_voxels_writer(h5out, 'RESET')
+    write_lhood = rst_io.reset_lhood_writer(h5out, 'Likelihood')
 
     for evt, pmap in pmaps.items():
-#        if evt > 500:
-#            break
+        if evt > 10:
+            break
         print(evt)
 
         s1 = pmap.s1s[0]
@@ -115,7 +84,8 @@ with tb.open_file(output_file, 'w') as h5out:
                 imageIter = vox
 
                 for j in range(iterations):
-                    imageIter = rst_ander.MLEM_step(voxDX, voxDY, imageIter, selVox, selSens, anode_response, cath_response, pmt_prob, sipm_prob, sipm_dist=sipm_dist, eThres=e_thres, fCathode = fCathode, fAnode = fAnode)
+                    imageIter, lhood = rst_ander.MLEM_step(voxDX, voxDY, imageIter, selVox, selSens, anode_response, cath_response, pmt_prob, sipm_prob, sipm_dist=sipm_dist, eThres=e_thres, fCathode = fCathode, fAnode = fAnode)
+                    write_lhood(evt, j, lhood)
 
                 for vid in np.arange(imageIter.shape[1]):
                     write_reset(evt, imageIter[0, vid], imageIter[1, vid], z, imageIter[2, vid])
