@@ -708,6 +708,7 @@ class PCity(City):
                                       events=evt_number,
                                       timestamps=evt_time,
                                       mc=None)
+            self.evt_number = evt_number
             evt = self.create_dst_event(pmapVectors, filter_output)
             write.dst(evt)
             if self.write_mc_info:
