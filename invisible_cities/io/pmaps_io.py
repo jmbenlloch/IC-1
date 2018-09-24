@@ -128,13 +128,13 @@ def load_pmaps(filename):
             siindx=sidf_grouped      .groups[event_number]
         except KeyError:
             siindx=[]
-        
+
         s1s = s1s_from_df(s1df   .iloc   [s1indx   ],
                           s1pmtdf.iloc   [s1pmtindx])
         s2s = s2s_from_df(s2df   .iloc   [s2indx   ],
                           s2pmtdf.iloc   [s2pmtindx],
                           sidf   .iloc   [siindx   ])
-        
+
         pmap_dict[event_number] = PMap(s1s, s2s)
 
     return pmap_dict
