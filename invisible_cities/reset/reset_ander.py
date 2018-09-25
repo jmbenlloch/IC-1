@@ -90,9 +90,13 @@ def MLEM_step(voxDX, voxDY, oldVox, selVox, selSens, anode_response, cath_respon
     if fCathode:
         cathForward = ComputeCathForward(oldVox, cath_response, pmt_prob)
 
-    cath_lhood  = compute_likelihood(cathForward, cath_response)
-    anode_lhood = compute_likelihood(anodeForward, anode_response)
-    likelihood = cath_lhood + anode_lhood
+    likelihood = 0
+    if fCathode:
+        cath_lhood  = compute_likelihood(cathForward, cath_response)
+        likelihood += cath_lhood
+    if fAnode:
+        anode_lhood = compute_likelihood(anodeForward, anode_response)
+        likelihood += anode_lhood
 
     for j in range(len(oldVox[0])):
         if oldVox[2][j] <= 0:
