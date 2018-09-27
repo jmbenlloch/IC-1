@@ -72,7 +72,7 @@ function install_conda {
     fi
 }
 
-CONDA_ENV_TAG=2018-08-29
+CONDA_ENV_TAG=2018-09-27
 CONDA_ENV_NAME=IC-${PYTHON_VERSION}-${CONDA_ENV_TAG}
 
 function make_environment {
@@ -101,6 +101,7 @@ dependencies:
 - flaky        = 3.4.0
 - hypothesis   = 3.59.1
 - pytest-xdist = 1.22.2
+- numba        = 0.39.0
 EOF
 
     conda env create -f ${YML_FILENAME}

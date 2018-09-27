@@ -735,6 +735,7 @@ class PCity(City):
                                       events=evt_number,
                                       timestamps=evt_time,
                                       mc=None)
+            self.evt_number = evt_number
             evt = self.create_dst_event(pmapVectors, filter_output)
             write.dst(evt)
             if self.write_mc_info:
@@ -783,6 +784,19 @@ class PCity(City):
         f = pmap_filter(self.s1s2_selector, pmap)
         self.cnt.n_events_not_s1s2_filter += int(not f.passed)
         return f
+
+
+class ResetCity(PCity):
+    """A city that read pmaps and computes/writes a RESET voxels"""
+
+    parameters = tuple("""iterations nsipms npmts dist sipm_dist pmt_dist
+                       sipm_thr x_size y_size rmax rebin_factor
+                       sipm_param sipm_node pmt_param pmt_node
+                       lifetime_corr lifetime_value lifetime_error
+                       use_sipms use_pmts""".split())
+
+    def __init__(self, **kwds):
+        super().__init__(**kwds)
 
 
 class KrCity(PCity):
