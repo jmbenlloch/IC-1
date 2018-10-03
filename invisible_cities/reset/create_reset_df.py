@@ -128,7 +128,6 @@ if __name__ == '__main__':
 
 
     voxels, likelihoods = read_data(files)
-    compute_barycenter(pmaps, voxels, likelihoods)
     events, positions_true, positions_reset, pmts_charge, sipms_charge, energies_true, energies_reset = compute_barycenter(pmaps, voxels, likelihoods)
     build_dataframe(df_file, events, positions_true, positions_reset, pmts_charge, sipms_charge, energies_true, energies_reset)
 

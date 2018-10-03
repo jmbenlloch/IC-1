@@ -144,6 +144,7 @@ def compute_likelihood(forward_proj, sns_response):
     if sns_response.ndim > 1:
         sns_response = sns_response[:,1]
     likelihood = -forward_proj + sns_response * np.log(forward_proj) - np.real(scipy.special.loggamma(sns_response + 1))
-    nans = np.isinf(likelihood)
+
+    nans = np.isinf(likelihood) + np.isnan(likelihood)
     likelihood[nans] = 0
     return likelihood.sum()

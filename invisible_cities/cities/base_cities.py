@@ -790,10 +790,10 @@ class ResetCity(PCity):
     """A city that read pmaps and computes/writes a RESET voxels"""
 
     parameters = tuple("""iterations nsipms npmts dist sipm_dist pmt_dist
-                       sipm_thr x_size y_size rmax rebin_factor
-                       sipm_param sipm_node pmt_param pmt_node
+                       sipm_thr_rel sipm_thr_abs x_size y_size rmax
+                       rebin_factor sipm_param sipm_node pmt_param pmt_node
                        lifetime_corr lifetime_value lifetime_error
-                       use_sipms use_pmts""".split())
+                       use_sipms use_pmts intermediate_voxels""".split())
 
     def __init__(self, **kwds):
         super().__init__(**kwds)

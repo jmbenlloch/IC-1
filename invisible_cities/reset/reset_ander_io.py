@@ -32,6 +32,7 @@ def reset_voxels_writer(hdf5_file, table_name, *, compression='ZLIB4'):
         row["z"  ]   = z
         row["E"  ]   = E
         row.append()
+        map_table.flush()
 
     return write_voxels
 
@@ -50,5 +51,6 @@ def reset_lhood_writer(hdf5_file, table_name, *, compression='ZLIB4'):
         row["iterations"] = iterations
         row["likelihood"] = likelihood
         row.append()
+        map_table.flush()
 
     return write_likelihood
