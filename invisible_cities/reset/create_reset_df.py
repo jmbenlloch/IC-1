@@ -115,15 +115,14 @@ if __name__ == '__main__':
     args = parser.parse_args(sys.argv[1:])
     pmaps_file = args.pmaps
     mc_file = args.mc
-    path = args.reset + '/*h5'
+    path = args.reset
     df_file = args.o
 
     #Get files
-    files = glob(path)
-    files.sort(key=lambda f: int(f.split('_')[-1].split('.')[0]))
+    files = [path]
 
     #Load pmaps and hits
-    pmaps = pio.load_pmaps('/home/jmbenlloch/reset/toy/data/detsim_test.h5')
+    pmaps = pio.load_pmaps(pmaps_file)
     hits_dict = load_mchits(mc_file)
 
 
