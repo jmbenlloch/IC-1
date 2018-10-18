@@ -1,5 +1,7 @@
 #!/usrbin/env bash
 
+#test
+
 COMMAND=$1
 ARGUMENT=$2
 
