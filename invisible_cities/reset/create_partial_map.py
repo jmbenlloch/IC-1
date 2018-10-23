@@ -47,6 +47,9 @@ def compute_position_and_charges(hits_dict, pmaps, sipm_xs, sipm_ys):
         for s2 in pmap.s2s:
             pmt_sum  =  pmt_sum + s2.pmts .sum_over_sensors.sum()
             ids = s2.sipms.ids
+            #if no sensors continue
+            if ids.shape[0] == 0:
+                continue
             sipm_sum[ids] = sipm_sum[ids] + s2.sipms.sum_over_times
         pmts[idx] = pmt_sum
 
