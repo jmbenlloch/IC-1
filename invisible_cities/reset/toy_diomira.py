@@ -42,11 +42,18 @@ def get_writers(h5out, npmts, pmt_wl, nsipms, sipm_wl):
 
     return writers
 
-def event_loop(writers, nevts, pmtrd, sipmrd, events, mcinfo, rebin_pmt, rebin_sipm):
+def event_loop(writers, nevts, pmtrd, sipmrd, events, mcinfo, rebin_pmt):
     for evt in np.arange(nevts):
         print("Evt: ", evt)
-        pmts_wfs  = rebin_waveforms(pmtrd [evt], rebin_pmt)
-        sipms_wfs = rebin_waveforms(sipmrd[evt], rebin_sipm)
+        #pmts_wfs  = rebin_waveforms(pmtrd [evt], rebin_pmt)
+        sipms_wfs = sipmrd[evt]
+
+        #rebin pmts
+        npmts = 12
+        pmt_wl = 32000
+        rebin_pmt = 25
+        reshaped = pmtrd[evt].reshape((npmts, pmt_wl, rebin_pmt))
+        pmts_wfs = np.apply_along_axis(np.sum, 2, reshaped).astype('int16')
 
         writers.pmt (pmts_wfs)
         writers.sipm(sipms_wfs)
@@ -72,7 +79,7 @@ def toy_diomira(wf_file, rwf_file):
     h5out = tb.open_file(rwf_file, 'w')
     writers = get_writers(h5out, npmts, pmt_wl, nsipms, sipm_wl)
 
-    event_loop(writers, nevts, pmtrd, sipmrd, events, mcinfo, rebin_pmt, rebin_sipm)
+    event_loop(writers, nevts, pmtrd, sipmrd, events, mcinfo, rebin_pmt)
 
     h5out.close()
 
