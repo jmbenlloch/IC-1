@@ -63,9 +63,6 @@ def event_loop(writers, nevts, pmtrd, sipmrd, events, mcinfo, rebin_pmt):
         run_number = 0
         writers.run_and_event(run_number, evtid, timestamp)
 
-        if evt > 3:
-            break
-
 def toy_diomira(wf_file, rwf_file):
     pmtrd, sipmrd, events, mcinfo = read_file(wf_file)
     rebin_pmt     = 25
