@@ -24,7 +24,8 @@ def compute_position_and_charges(hits_dict, pmaps, sipm_xs, sipm_ys):
     sipm_xdists = np.zeros(nevents*1792)
     sipm_ydists = np.zeros(nevents*1792)
 
-    for idx, (evt, hits) in enumerate(hits_dict.items()):
+    for idx, evt in enumerate(pmaps.keys()):
+        hits = hits_dict[evt]
         print(idx, evt)
         # MC True position
         nhits    = len(hits)
