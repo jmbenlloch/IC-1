@@ -16,7 +16,7 @@ from glob import glob
 
 
 def compute_position_and_charges(hits_dict, pmaps, sipm_xs, sipm_ys):
-    nevents   = len(hits_dict)
+    nevents   = len(pmaps)
     positions = np.empty([nevents, 3])
     pmts      = np.empty(nevents)
 
