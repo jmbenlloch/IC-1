@@ -90,15 +90,21 @@ class Irenetoy(City):
             pmt_sum = pmts.sum(0)
             sipms = sipmrwf[evt]
             # Search S1
-            s1_indx, s1_ene = pkf.indices_and_wf_above_threshold(pmt_sum, self.conf.s1_e_thr)
-            s1s = pkf.find_peaks(pmts, s1_indx, self.s1params.time, self.s1params.length,
-                                 self.s1params.stride, self.s1params.rebin_stride,
-                                 Pk=S1, pmt_ids=range(12), sipm_wfs=None, thr_sipm_s2=0)
+            try:
+                s1_indx, s1_ene = pkf.indices_and_wf_above_threshold(pmt_sum, self.conf.s1_e_thr)
+                s1s = pkf.find_peaks(pmts, s1_indx, self.s1params.time, self.s1params.length,
+                                     self.s1params.stride, self.s1params.rebin_stride,
+                                     Pk=S1, pmt_ids=range(12), sipm_wfs=None, thr_sipm_s2=0)
+            except IndexError:
+                continue
             # Search S2
-            s2_indx, s2_ene = pkf.indices_and_wf_above_threshold(pmt_sum, self.conf.s2_e_thr)
-            s2s = pkf.find_peaks(pmts, s2_indx, self.s2params.time, self.s2params.length,
-                                 self.s2params.stride, self.s2params.rebin_stride,
-                                 Pk=S2, pmt_ids=range(12), sipm_wfs=sipms, thr_sipm_s2=0)
+            try:
+                s2_indx, s2_ene = pkf.indices_and_wf_above_threshold(pmt_sum, self.conf.s2_e_thr)
+                s2s = pkf.find_peaks(pmts, s2_indx, self.s2params.time, self.s2params.length,
+                                     self.s2params.stride, self.s2params.rebin_stride,
+                                     Pk=S2, pmt_ids=range(12), sipm_wfs=sipms, thr_sipm_s2=0)
+            except IndexError:
+                continue
 
             pmap = PMap(s1s, s2s)
 
