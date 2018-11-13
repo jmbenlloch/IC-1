@@ -40,10 +40,6 @@ def get_nbins(files):
     with tb.open_file(files[0]) as h5in:
         pmt_bins  = h5in.root.ResetMap.pmt_counts .shape[0]
         sipm_bins = h5in.root.ResetMap.sipm_counts.shape[0]
-
-        pmt_bins  = int(np.sqrt(pmt_bins ))
-        sipm_bins = int(np.sqrt(sipm_bins))
-
         return pmt_bins, sipm_bins
 
 def make_plot(xs, ys, values, filename):
