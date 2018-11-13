@@ -9,11 +9,11 @@ from glob import glob
 from invisible_cities.io.table_io import make_table
 
 
-def combine_maps(files):
-    pmts_values  = np.zeros(6400)
-    pmts_counts  = np.zeros(6400)
-    sipms_values = np.zeros(3600)
-    sipms_counts = np.zeros(3600)
+def combine_maps(files, pmt_bins, sipm_bins):
+    pmts_values  = np.zeros(pmt_bins)
+    pmts_counts  = np.zeros(pmt_bins)
+    sipms_values = np.zeros(sipm_bins)
+    sipms_counts = np.zeros(sipm_bins)
 
     for f in files:
         with tb.open_file(f) as h5in:
@@ -35,6 +35,16 @@ def combine_maps(files):
 
     return pmts_xs, pmts_ys, pmt_factors, sipms_xs, sipms_ys, sipm_factors
 
+def get_nbins(files):
+    pmt_bins, sipm_bins = 0, 0
+    with tb.open_file(files[0]) as h5in:
+        pmt_bins  = h5in.root.ResetMap.pmt_counts .shape[0]
+        sipm_bins = h5in.root.ResetMap.sipm_counts.shape[0]
+
+        pmt_bins  = int(np.sqrt(pmt_bins ))
+        sipm_bins = int(np.sqrt(sipm_bins))
+
+        return pmt_bins, sipm_bins
 
 def make_plot(xs, ys, values, filename):
     nbins = np.unique(xs).shape[0]
@@ -83,7 +93,9 @@ if __name__ == '__main__':
     pmt_plot  = map_file + '_pmts.png'
     sipm_plot = map_file + '_sipms.png'
 
-    pmts_xs, pmts_ys, pmt_values, sipms_xs, sipms_ys, sipm_values = combine_maps(files)
+    pmt_bins, sipm_bins = get_nbins(files)
+
+    pmts_xs, pmts_ys, pmt_values, sipms_xs, sipms_ys, sipm_values = combine_maps(files, pmt_bins, sipm_bins)
 
     make_plot(pmts_xs , pmts_ys , pmt_values , pmt_plot)
     make_plot(sipms_xs, sipms_ys, sipm_values, sipm_plot)

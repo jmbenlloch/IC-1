@@ -114,11 +114,15 @@ def map_writer(hdf5_file, table_name, *, compression='ZLIB4'):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-pmaps", required=True)
-    parser.add_argument("-o", required=True)
+    parser.add_argument("-o"    , required=True)
+    parser.add_argument("-pmts" , required=True)
+    parser.add_argument("-sipms", required=True)
 
     args = parser.parse_args(sys.argv[1:])
     pmaps_file = args.pmaps
-    map_file = args.o
+    map_file   = args.o
+    pmt_bins   = int(args.pmts)
+    sipm_bins  = int(args.sipms)
 
     # Load pmaps
     pmaps = pmapio.load_pmaps(pmaps_file)
@@ -135,7 +139,7 @@ if __name__ == '__main__':
 
     with tb.open_file(map_file, 'w') as h5out:
         # PMT maps
-        nbins = 80
+        nbins = pmt_bins
         range = [[-200, 200], [-200, 200]]
         xedges, yedges, values, counts = compute_histogram(xs, ys, pmts, nbins, range=range)
         write_pmt_values  = map_writer(h5out, 'pmt_values')
@@ -144,7 +148,7 @@ if __name__ == '__main__':
         write_pmt_counts(counts.flatten(), xedges, yedges)
 
         # SiPM maps
-        nbins = 60
+        nbins = sipm_bins
         range = [[-30, 30], [-30, 30]]
         xedges, yedges, values, counts = compute_histogram(sipm_xs, sipm_ys, sipm_es, nbins, range=range)
         write_sipm_values = map_writer(h5out, 'sipm_values')
