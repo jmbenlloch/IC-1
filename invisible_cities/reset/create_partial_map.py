@@ -24,7 +24,8 @@ def compute_position_and_charges(hits_dict, pmaps, sipm_xs, sipm_ys):
     sipm_xdists = np.zeros(nevents*1792)
     sipm_ydists = np.zeros(nevents*1792)
 
-    for idx, evt in enumerate(pmaps.keys()):
+    idx = 0
+    for evt in pmaps.keys():
         hits = hits_dict[evt]
         print(idx, evt)
         # MC True position
@@ -67,7 +68,9 @@ def compute_position_and_charges(hits_dict, pmaps, sipm_xs, sipm_ys):
         sipm_xdists[idx*1792:(idx+1)*1792] = x_dists
         sipm_ydists[idx*1792:(idx+1)*1792] = y_dists
 
-    return positions, pmts, sipm_es, sipm_xdists, sipm_ydists
+        idx = idx + 1
+
+    return positions[:idx], pmts[:idx], sipm_es[:idx], sipm_xdists[:idx], sipm_ydists[:idx]
 
 
 def compute_histogram(xs, ys, energies, nbins, range=None):
