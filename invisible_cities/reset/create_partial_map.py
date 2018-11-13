@@ -52,6 +52,11 @@ def compute_position_and_charges(hits_dict, pmaps, sipm_xs, sipm_ys):
             if ids.shape[0] == 0:
                 continue
             sipm_sum[ids] = sipm_sum[ids] + s2.sipms.sum_over_times
+
+        # if no charge skip event
+        if pmt_sum == 0:
+            continue
+
         pmts[idx] = pmt_sum
 
         # Sipms
