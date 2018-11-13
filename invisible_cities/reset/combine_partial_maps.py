@@ -9,7 +9,7 @@ from glob import glob
 from invisible_cities.io.table_io import make_table
 
 
-def combine_maps(files, pmt_bins, sipm_bins):
+def combine_maps(files, pmt_bins, sipm_bins, norm=False):
     pmts_values  = np.zeros(pmt_bins)
     pmts_counts  = np.zeros(pmt_bins)
     sipms_values = np.zeros(sipm_bins)
@@ -32,6 +32,13 @@ def combine_maps(files, pmt_bins, sipm_bins):
 
     pmt_factors  = (pmts_values  / pmts_counts ).flatten()
     sipm_factors = (sipms_values / sipms_counts).flatten()
+
+    if norm:
+        pmt_factors = pmt_factors.max() / pmt_factors
+        pmt_factors[np.isinf(pmt_factors)] = 0
+
+        sipm_factors = sipm_factors.max() / sipm_factors
+        sipm_factors[np.isinf(sipm_factors)] = 0
 
     return pmts_xs, pmts_ys, pmt_factors, sipms_xs, sipms_ys, sipm_factors
 
@@ -81,9 +88,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-maps", required=True)
     parser.add_argument("-o", required=True)
+    parser.add_argument("-norm", action="store_true")
+
     args = parser.parse_args(sys.argv[1:])
     maps_path = args.maps
     map_file = args.o
+    norm = args.norm
+
     files = glob(maps_path + '/*h5')
 
     pmt_plot  = map_file + '_pmts.png'
@@ -91,7 +102,7 @@ if __name__ == '__main__':
 
     pmt_bins, sipm_bins = get_nbins(files)
 
-    pmts_xs, pmts_ys, pmt_values, sipms_xs, sipms_ys, sipm_values = combine_maps(files, pmt_bins, sipm_bins)
+    pmts_xs, pmts_ys, pmt_values, sipms_xs, sipms_ys, sipm_values = combine_maps(files, pmt_bins, sipm_bins, norm)
 
     make_plot(pmts_xs , pmts_ys , pmt_values , pmt_plot)
     make_plot(sipms_xs, sipms_ys, sipm_values, sipm_plot)
