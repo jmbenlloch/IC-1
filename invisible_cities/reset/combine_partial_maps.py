@@ -27,6 +27,9 @@ def combine_maps(files):
             sipms_counts = sipms_counts + h5in.root.ResetMap.sipm_counts.cols.value[:]
             sipms_values = sipms_values + h5in.root.ResetMap.sipm_values.cols.value[:]
 
+    pmts_counts [pmts_counts  == 0] = 1
+    sipms_counts[sipms_counts == 0] = 1
+
     pmt_factors  = (pmts_values  / pmts_counts ).flatten()
     sipm_factors = (sipms_values / sipms_counts).flatten()
 
