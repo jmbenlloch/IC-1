@@ -20,7 +20,7 @@ def compute_position_and_charges(hits_dict, pmaps, sipm_xs, sipm_ys):
     positions = np.empty([nevents, 3])
     pmts      = np.empty(nevents)
 
-    sipm_es      = np.zeros(nevents*1792)
+    sipm_es     = np.zeros(nevents*1792)
     sipm_xdists = np.zeros(nevents*1792)
     sipm_ydists = np.zeros(nevents*1792)
 
@@ -77,7 +77,6 @@ def compute_histogram(xs, ys, energies, nbins, range=None):
     values, xedges, yedges = np.histogram2d(xs, ys, weights=energies, bins=nbins, range=range)
     ones = np.ones_like(xs)
     counts, xedges, yedges = np.histogram2d(xs, ys, weights=ones, bins=nbins, range=range)
-    counts[counts == 0] = 1
 
     xedges = shift_to_bin_centers(xedges)
     yedges = shift_to_bin_centers(yedges)
