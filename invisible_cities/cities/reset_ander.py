@@ -42,8 +42,13 @@ class Reset_ander(ResetCity):
     def create_dst_event(self, pmapVectors, filter_output):
         writers_dict = vars(self.writers)
 
-        s1_index = np.argmax(filter_output.s1_peaks)
-        s1 = pmapVectors.pmaps.s1s[s1_index]
+        # If there is no s1 for some reason, argmax will fail
+        # So we skip the event
+        try:
+            s1_index = np.argmax(filter_output.s1_peaks)
+            s1 = pmapVectors.pmaps.s1s[s1_index]
+        except ValueError:
+            return []
 
         t0  = s1.time_at_max_energy
 
