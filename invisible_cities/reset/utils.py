@@ -166,8 +166,9 @@ from invisible_cities.evm.ic_containers import ResetRatios
 
 def compute_sipm_ratio(sipm_dist, pitch, xsize, ysize):
     sipms_per_voxel = int(math.floor(2 * sipm_dist / pitch) + 1)**2
+    # if voxels are 10mm then this will be 16, but should be 25 due to border effects
     voxels_per_sipm = int((2 * sipm_dist)**2 / (xsize * ysize))
-
+    voxels_per_sipm = int((np.ceil(np.sqrt(16)) + 1)**2)
     ratios = ResetRatios(sipms_per_voxel, voxels_per_sipm)
     return ratios
 
