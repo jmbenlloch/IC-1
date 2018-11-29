@@ -2,8 +2,6 @@ import numpy as np
 import math
 import os
 
-import pdb
-
 import invisible_cities.database.load_db as dbf
 
 import pycuda.driver as cuda
