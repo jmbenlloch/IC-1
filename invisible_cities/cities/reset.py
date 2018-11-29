@@ -4,7 +4,6 @@ import invisible_cities.reset.utils as rst_utils
 
 import invisible_cities.reset.reset_gpu as rstf
 import invisible_cities.reco.corrections    as corrf
-import pdb
 
 from time import time
 import numpy as np
@@ -87,8 +86,6 @@ class Reset(ResetCity):
                     voxel_idx = voxel_idx + 1
             t1 = time()
             print("array_fill: {}".format(t1-t0))
-#            import pdb
-#            pdb.set_trace()
 
 #        return voxels_out
         return voxels_out[:voxel_idx]
