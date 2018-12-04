@@ -111,7 +111,9 @@ def prepare_data(s1, s2, slice_width, data_sipm,
         if zcorrection:
             correction = zcorrection(z).value
         charge  = s2_rebin.sipms.time_slice(tbin) * correction
-        selC    = (charge > sipm_thr)
+        min_charge = charge.max() * sipm_thr/100
+        selC    = charge > min_charge
+        #selC    = (charge > sipm_thr)
         charge  = charge[selC]
         s2e     = s2_rebin.pmts.sum_over_sensors[tbin] * correction
         ids     = s2_rebin.sipms.ids[selC]
