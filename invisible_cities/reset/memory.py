@@ -72,3 +72,27 @@ def copy_sensor_probs_d2h(sns_probs_d, probs_size):
     sensor_probs = ResetSnsProbs(sns_probs_h, voxel_ids_h, nsensors, sensor_starts_h, sensor_starts_ids_h)
     return sensor_probs
 
+
+def copy_probs_h2d(probs_h):
+    nprobs       = probs_h.nprobs
+    probs_d      = cuda.to_device(probs_h.probs)
+    sensor_ids_d = cuda.to_device(probs_h.sensor_ids)
+    fwd_num_d    = cuda.to_device(probs_h.fwd_nums)
+
+    voxel_start_d  = cuda.to_device(probs_h.voxel_start)
+    sensor_start_d   = cuda.to_device(probs_h.sensor_start)
+
+    rst_probs = ResetProbs(nprobs, probs_d, sensor_ids_d, voxel_start_d, sensor_start_d, fwd_num_d)
+    return rst_probs
+
+def copy_sensor_probs_d2h(sns_probs_h):
+    nsensors    = sns_probs_h.nsensors
+    sns_probs_d = cuda.to_device(sns_probs_h.probs)
+    voxel_ids_d = cuda.to_device(sns_probs_h.voxel_ids)
+
+    sensor_starts_d     = cuda.to_device(sns_probs_h.sensor_start)
+    sensor_starts_ids_d = cuda.to_device(sns_probs_h.sensor_start_ids)
+
+    sensor_probs = ResetSnsProbs(sns_probs_d, voxel_ids_d, nsensors, sensor_starts_d, sensor_starts_ids_d)
+    return sensor_probs
+
