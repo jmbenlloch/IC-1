@@ -8,7 +8,7 @@ from invisible_cities.evm.ic_containers import VoxelsLimits
 from invisible_cities.evm.ic_containers import ResetVoxels
 from invisible_cities.evm.ic_containers import ResetSlices
 
-voxels_dt      = np.dtype([('x', 'f4'), ('y', 'f4'), ('E', 'f4')])
+voxels_dt      = np.dtype([('x', 'f8'), ('y', 'f8'), ('E', 'f8')])
 
 def copy_voxels_data_h2d(voxels):
     nslices       = np.int32      (voxels.nslices)
@@ -46,9 +46,9 @@ def copy_voxels_d2h(rst_voxels_d):
 
 def copy_probs_d2h(probs_d, nvoxels, nslices, nsensors):
     nprobs       = probs_d.nprobs
-    probs_h      = cuda.from_device(probs_d.probs,      (int(probs_d.nprobs),), np.dtype('f4'))
+    probs_h      = cuda.from_device(probs_d.probs,      (int(probs_d.nprobs),), np.dtype('f8'))
     sensor_ids_h = cuda.from_device(probs_d.sensor_ids, (int(probs_d.nprobs),), np.dtype('i4'))
-    fwd_num_h    = cuda.from_device(probs_d.fwd_nums,   (int(probs_d.nprobs),), np.dtype('f4'))
+    fwd_num_h    = cuda.from_device(probs_d.fwd_nums,   (int(probs_d.nprobs),), np.dtype('f8'))
 
     voxel_start_h  = cuda.from_device(probs_d.voxel_start,  (int(nvoxels+1),), np.dtype('i4'))
 
@@ -63,7 +63,7 @@ def copy_probs_d2h(probs_d, nvoxels, nslices, nsensors):
 
 def copy_sensor_probs_d2h(sns_probs_d, probs_size):
     nsensors    = sns_probs_d.nsensors
-    sns_probs_h = cuda.from_device(sns_probs_d.probs,     (int(probs_size),), np.dtype('f4'))
+    sns_probs_h = cuda.from_device(sns_probs_d.probs,     (int(probs_size),), np.dtype('f8'))
     voxel_ids_h = cuda.from_device(sns_probs_d.voxel_ids, (int(probs_size),), np.dtype('i4'))
 
     sensor_starts_h     = cuda.from_device(sns_probs_d.sensor_start,     (int(sns_probs_d.nsensors+1),), np.dtype('i4'))

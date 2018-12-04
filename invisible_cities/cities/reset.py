@@ -1,4 +1,5 @@
 from argparse import Namespace
+import pdb
 import os
 import invisible_cities.reset.utils as rst_utils
 
@@ -34,7 +35,7 @@ class Reset(ResetCity):
                                              self.conf.lifetime_error)
 
 #        voxels_out = []
-        voxels_dt  = np.dtype([('event', 'i4'), ('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('E', 'f4')])
+        voxels_dt  = np.dtype([('event', 'i4'), ('x', 'f8'), ('y', 'f8'), ('z', 'f8'), ('E', 'f8')])
         voxels_out = np.empty(1000000, dtype=voxels_dt)
         voxel_idx  = 0
 
