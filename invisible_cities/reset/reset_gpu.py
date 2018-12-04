@@ -18,6 +18,9 @@ from invisible_cities.evm.ic_containers import ResetSnsProbs
 from invisible_cities.evm.ic_containers import GPUScan
 from invisible_cities.evm.ic_containers import ResetVoxels
 
+import invisible_cities.reco.dst_functions as dstf
+import invisible_cities.reset.reset_ander as rst_serial
+
 
 EmptySnsProbs = ResetSnsProbs(np.intp(0), np.intp(0), np.int32(0), np.intp(0), np.intp(0))
 EmptyProbs    = ResetProbs(np.int32(0), np.intp(0), np.intp(0), np.intp(0), np.intp(0), np.intp(0))
@@ -26,7 +29,7 @@ class RESET:
     def __init__(self, data_sipm, nsipms, npmts, dist, sipm_dist,
                  pmt_dist, xsize, ysize, rmax,
                  sipm_param, sipm_node, pmt_param, pmt_node,
-                 use_sipms, use_pmts):
+                 use_sipms, use_pmts, serial_probs):
         self.nsipms    = np.int32(nsipms)
         self.npmts     = np.int32(npmts)
         self.use_sipms = use_sipms
@@ -40,6 +43,7 @@ class RESET:
         self.data_sipm = data_sipm
 #        self.data_pmt  = dbf.DataPMT(run_number)
         self.pitch     = 10. #hardcoded value!
+        self.serial    = serial_probs
 
         det_xsize = self.data_sipm.X.ptp()
         det_ysize = self.data_sipm.Y.ptp()
@@ -51,6 +55,9 @@ class RESET:
         self._compile()
         self._load_xy_positions()
         self._load_parametrization(sipm_param, sipm_node, pmt_param, pmt_node)
+
+        if self.serial:
+            self._load_parametrization_serial(sipm_param, sipm_node, pmt_param, pmt_node)
 #        self._mem_allocations()
 
     def _create_context(self):
@@ -96,6 +103,10 @@ class RESET:
         self.pmt_param  =  pmt_param._replace(params = pmts_corr_d)
         self.sipm_param = sipm_param._replace(params = sipms_corr_d)
 
+    def _load_parametrization_serial(self, sipm_param, sipm_node, pmt_param, pmt_node):
+        self.sipm_xy_map = dstf.load_xy_corrections(sipm_param, group="ResetMap", node="SiPM")
+        self.pmt_xy_map  = dstf.load_xy_corrections(pmt_param,  group="ResetMap", node="PMT")
+
     # sizes of gpuarrays need to be updated with .shape in order to
     # do scan only where there is real data
     def _mem_allocations(self):
@@ -119,6 +130,36 @@ class RESET:
         anode_d = create_anode_response(self.cudaf, slices_data_d)
         cath_d  = create_cath_response(energies)
 
+        if self.serial:
+            print("serial mode")
+            #get voxels and put them in the proper format for serial funtions
+            rst_voxels_h = rst_mem.copy_voxels_d2h(rst_voxels)
+            voxels_serial = np.array(([v[0] for v in rst_voxels_h.voxels], [v[1] for v in rst_voxels_h.voxels]))
+
+            # get anode response
+            anode_h = cuda.from_device(anode_d, (slices_data_d.nsensors), np.dtype('f4'))
+            anode_serial = np.zeros([1792, 2])
+            anode_serial[:,0] = np.arange(0, 1792)
+            anode_serial[:,1] = anode_h
+
+            sipm_probs_h, sipm_sns_probs_h, pmt_probs_h, pmt_sns_probs_h = compute_probs_serial(self.data_sipm, voxels_serial, anode_serial, energies, self.sipm_dist, rst_voxels.nvoxels, self.pmt_xy_map, self.sipm_xy_map)
+            sipm_probs     = rst_mem.copy_probs_h2d       (sipm_probs_h)
+            pmt_probs      = rst_mem.copy_probs_h2d       (pmt_probs_h)
+            sipm_sns_probs = rst_mem.copy_sensor_probs_d2h(sipm_sns_probs_h)
+            pmt_sns_probs  = rst_mem.copy_sensor_probs_d2h(pmt_sns_probs_h)
+        else:
+            print("parallel mode")
+            sipm_probs, sipm_sns_probs, pmt_probs, pmt_sns_probs = self.compute_gpu_probs(
+                            rst_voxels, slices_start_nc_d, anode_d, cath_d, voxels_data_d)
+
+        voxels_h = compute_mlem(self.cudaf, iterations, rst_voxels,
+                     voxels_data_d.nslices,
+                     self.use_pmts, self.npmts, pmt_probs, pmt_sns_probs,
+                     self.use_sipms, self.nsipms, sipm_probs, sipm_sns_probs)
+
+        return voxels_h, slice_ids_h
+
+    def compute_gpu_probs(self, rst_voxels, slices_start_nc_d, anode_d, cath_d, voxels_data_d):
         # Variables has to be initialized independently of use_sipms
         sipm_probs     = EmptyProbs
         sipm_sns_probs = EmptySnsProbs
@@ -161,12 +202,20 @@ class RESET:
                              self.xsize, self.ysize,
                              pmt_probs.sensor_start)
 
-        voxels_h = compute_mlem(self.cudaf, iterations, rst_voxels,
-                     voxels_data_d.nslices,
-                     self.use_pmts, self.npmts, pmt_probs, pmt_sns_probs,
-                     self.use_sipms, self.nsipms, sipm_probs, sipm_sns_probs)
+        return sipm_probs, sipm_sns_probs, pmt_probs, pmt_sns_probs
 
-        return voxels_h, slice_ids_h
+
+def compute_probs_serial(data_sipm, voxels, anode_response, energies, sipm_dist, nvoxels, pmt_xy_map, sipm_xy_map):
+    voxDX, voxDY = rst_serial.computeDiff(data_sipm, voxels, anode_response)
+    selVox, selSens = rst_serial.createSel(voxDX, voxDY, anode_response, sipm_dist)
+    sipm_probs_serial, pmt_probs_serial = rst_serial.computeProb(pmt_xy_map, sipm_xy_map, voxDX, voxDY, voxels[0], voxels[1])
+
+    sipm_probs_serial_h = rst_serial.build_sipm_probs_serial(selSens, selVox, sipm_probs_serial, anode_response)
+    sipm_sns_probs_serial_h = rst_serial.build_sipm_sns_probs_serial(sipm_probs_serial_h)
+    pmt_probs_serial_h = rst_serial.build_pmt_probs_serial(pmt_probs_serial, energies)
+    pmt_sns_probs_serial_h = rst_serial.build_pmt_sns_probs_serial(pmt_probs_serial_h, nvoxels)
+
+    return sipm_probs_serial_h, sipm_sns_probs_serial_h, pmt_probs_serial_h, pmt_sns_probs_serial_h
 
 
 def create_voxels(cudaf, scan, voxels_data_d, xsize, ysize,
