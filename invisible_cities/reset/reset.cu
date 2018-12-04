@@ -380,6 +380,10 @@ __global__ void mlem_step(voxel * voxels, int * pmt_voxel_starts,
 			}
 		}
 
-		voxels[vidx].E = voxels[vidx].E / (pmt_eff + sipm_eff ) * (pmt_fwd + sipm_fwd);
+		if (sipm_eff > 0 && sipm_fwd > 0){
+			voxels[vidx].E = voxels[vidx].E / (pmt_eff + sipm_eff ) * (pmt_fwd + sipm_fwd);
+		}else{
+			voxels[vidx].E = 0;
+		}
 	}
 }
