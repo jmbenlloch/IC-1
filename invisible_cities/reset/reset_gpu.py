@@ -34,12 +34,12 @@ class RESET:
         self.npmts     = np.int32(npmts)
         self.use_sipms = use_sipms
         self.use_pmts  = use_pmts
-        self.dist      = np.float32(dist)
-        self.sipm_dist = np.float32(sipm_dist)
-        self.pmt_dist  = np.float32(pmt_dist)
-        self.xsize     = np.float32(xsize)
-        self.ysize     = np.float32(ysize)
-        self.rmax      = np.float32(rmax)
+        self.dist      = np.float64(dist)
+        self.sipm_dist = np.float64(sipm_dist)
+        self.pmt_dist  = np.float64(pmt_dist)
+        self.xsize     = np.float64(xsize)
+        self.ysize     = np.float64(ysize)
+        self.rmax      = np.float64(rmax)
         self.data_sipm = data_sipm
 #        self.data_pmt  = dbf.DataPMT(run_number)
         self.pitch     = 10. #hardcoded value!
@@ -79,17 +79,17 @@ class RESET:
 
     def _load_xy_positions(self):
         #Get (x,y) positions
-        self.xs_sipms_h = self.data_sipm.X.values.astype('f4')
-        self.ys_sipms_h = self.data_sipm.Y.values.astype('f4')
+        self.xs_sipms_h = self.data_sipm.X.values.astype('f8')
+        self.ys_sipms_h = self.data_sipm.Y.values.astype('f8')
         self.xs_sipms_d = cuda.to_device(self.xs_sipms_h)
         self.ys_sipms_d = cuda.to_device(self.ys_sipms_h)
 
         #TODO: Generalize for any number of PMTs
         #Need to choose somehow whether to use one or more PMTs
-        #self.xs_pmts = DataPMT.X.values.astype('f4')
-        #self.ys_pmts = DataPMT.Y.values.astype('f4')
-        self.xs_pmts_h = np.array([0.], dtype='f4')
-        self.ys_pmts_h = np.array([0.], dtype='f4')
+        #self.xs_pmts = DataPMT.X.values.astype('f8')
+        #self.ys_pmts = DataPMT.Y.values.astype('f8')
+        self.xs_pmts_h = np.array([0.], dtype='f8')
+        self.ys_pmts_h = np.array([0.], dtype='f8')
         self.xs_pmts_d = cuda.to_device(self.xs_pmts_h)
         self.ys_pmts_d = cuda.to_device(self.ys_pmts_h)
 
@@ -137,7 +137,7 @@ class RESET:
             voxels_serial = np.array(([v[0] for v in rst_voxels_h.voxels], [v[1] for v in rst_voxels_h.voxels]))
 
             # get anode response
-            anode_h = cuda.from_device(anode_d, (slices_data_d.nsensors), np.dtype('f4'))
+            anode_h = cuda.from_device(anode_d, (slices_data_d.nsensors), np.dtype('f8'))
             anode_serial = np.zeros([1792, 2])
             anode_serial[:,0] = np.arange(0, 1792)
             anode_serial[:,1] = anode_h
@@ -258,7 +258,7 @@ def create_voxels(cudaf, scan, voxels_data_d, xsize, ysize,
 
 def create_anode_response(cudaf, slices_data_d):
     total_sensors = int(slices_data_d.nslices * slices_data_d.nsensors)
-    anode_response_d = cuda.mem_alloc(total_sensors * 4)
+    anode_response_d = cuda.mem_alloc(total_sensors * 8)
     cuda.memset_d32(anode_response_d, 0, total_sensors)
 
     create_anode = cudaf.get_function('create_anode_response')
@@ -284,16 +284,16 @@ def compute_probabilites(cudaf, scan, voxels, nsensors, sensors_per_voxel,
     # Reserve memory for probabilities and to compact it
     probs_size = int(voxels.nvoxels * sensors_per_voxel)
 
-    probs_nc_d       = cuda.mem_alloc(probs_size * 4)
+    probs_nc_d       = cuda.mem_alloc(probs_size * 8)
 #    probs_active_d   = cuda.mem_alloc(probs_size)
     probs_active     = gpuarray.zeros(probs_size, np.dtype('i1'))
     probs_active_d   = probs_active.gpudata
     probs_addr       = gpuarray.zeros(probs_size+1, np.dtype('i4'))
     sensors_ids_nc_d = cuda.mem_alloc(probs_size * 4)
 
-    probs_d       = cuda.mem_alloc(probs_size * 4)
+    probs_d       = cuda.mem_alloc(probs_size * 8)
     sensors_ids_d = cuda.mem_alloc(probs_size * 4)
-    fwd_num_d     = cuda.mem_alloc(probs_size * 4)
+    fwd_num_d     = cuda.mem_alloc(probs_size * 8)
 
     voxel_starts  = gpuarray.zeros(int(voxels.nvoxels + 1), np.dtype('i4'))
 
@@ -349,7 +349,7 @@ def compute_sensor_probs(cudaf, voxels, nsensors, voxels_per_sensor,
                          xsize, ysize, sensor_starts):
     sensor_probs_size = int(voxels.nslices * nsensors * voxels_per_sensor)
 
-    sensor_probs_d         = cuda.mem_alloc(sensor_probs_size * 4)
+    sensor_probs_d         = cuda.mem_alloc(sensor_probs_size * 8)
     active_sensor_probs_d  = cuda.mem_alloc(sensor_probs_size)
     voxel_ids_d            = cuda.mem_alloc(sensor_probs_size * 4)
     cuda.memset_d8(active_sensor_probs_d, 0, sensor_probs_size)
@@ -396,7 +396,7 @@ def compute_mlem(cudaf, iterations, rst_voxels_d, nslices,
     if use_sipms:
         block_sipm = 1024
         grid_sipm  = math.ceil(sipm_sns_probs.nsensors / block_sipm)
-        sipm_denoms   = gpuarray.zeros(int(nsipms * nslices), np.dtype('f4'))
+        sipm_denoms   = gpuarray.zeros(int(nsipms * nslices), np.dtype('f8'))
         sipm_denoms_d = sipm_denoms.gpudata
 
     block_pmt = grid_pmt = 0
@@ -404,7 +404,7 @@ def compute_mlem(cudaf, iterations, rst_voxels_d, nslices,
     if use_pmts:
         block_pmt = int(pmt_sns_probs.nsensors) if pmt_sns_probs.nsensors < 1024 else 1024
         grid_pmt  = math.ceil(pmt_sns_probs.nsensors / block_pmt)
-        pmt_denoms    = gpuarray.zeros(int(npmts * nslices), np.dtype('f4'))
+        pmt_denoms    = gpuarray.zeros(int(npmts * nslices), np.dtype('f8'))
         pmt_denoms_d  = pmt_denoms.gpudata
 
     # Without debugging probably could be 1024

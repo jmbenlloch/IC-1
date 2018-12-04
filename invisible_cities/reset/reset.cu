@@ -1,28 +1,28 @@
 #include <stdio.h>
 
 struct voxel{
-	float x;
-	float y;
-	float E;
+	double x;
+	double y;
+	double E;
 };
 
 struct correction{
-	float x;
-	float y;
-	float factor;
+	double x;
+	double y;
+	double factor;
 };
 
 // Launch: block <1024, 1, 1>, grid <nslices,1>
 // All voxels are initialized with "charge" and only those within 
 // fiducial volume are set to be active
 __global__ void create_voxels(voxel * voxels, 
-		int * slice_start, float * xmins, float * xmaxs, 
-		float * ymins, float * ymaxs, float * charges, float xsize, 
-		float ysize, float rmax, bool * actives, int * address,
+		int * slice_start, double * xmins, double * xmaxs, 
+		double * ymins, double * ymaxs, double * charges, double xsize, 
+		double ysize, double rmax, bool * actives, int * address,
 		int * slices_ids){
 
 	int offset = slice_start[blockIdx.x];
-	float charge = charges[blockIdx.x];
+	double charge = charges[blockIdx.x];
 
 	int xmin = xmins[blockIdx.x];
 	int xmax = xmaxs[blockIdx.x];
@@ -36,8 +36,8 @@ __global__ void create_voxels(voxel * voxels,
 
 	for(int i=0; i<iterations; i++){
 		int vid = threadIdx.x + i*blockDim.x;
-		float x = xmin + (vid / ysteps) * xsize;
-		float y = ymin + (vid % ysteps) * xsize;
+		double x = xmin + (vid / ysteps) * xsize;
+		double y = ymin + (vid % ysteps) * xsize;
 
 		if(x <= xmax && y <= ymax){
 			bool active = sqrtf(x*x + y*y) < rmax;
@@ -86,8 +86,8 @@ __global__ void compact_voxels(voxel * voxels_nc, voxel * voxels,
 }
 
 // Launch grid <nslices, 1>, block <1024, 1, 1>
-__global__ void create_anode_response(float * anode_response, int nsensors,
-		int * sensors_ids, float * charges, int * slices_start){
+__global__ void create_anode_response(double * anode_response, int nsensors,
+		int * sensors_ids, double * charges, int * slices_start){
 	int start = slices_start[blockIdx.x];
 	int end   = slices_start[blockIdx.x+1];
 	int steps = end - start;
@@ -104,13 +104,13 @@ __global__ void create_anode_response(float * anode_response, int nsensors,
 	}
 }
 
-__device__ void get_probability(float * prob, bool * active, voxel * voxels, 
-		int vidx, int sidx,	float * xs, float * ys, float sensor_dist,
-	    float xmin, float ymin,	float step,	int nbins, correction * corrections){
+__device__ void get_probability(double * prob, bool * active, voxel * voxels, 
+		int vidx, int sidx,	double * xs, double * ys, double sensor_dist,
+	    double xmin, double ymin,	double step,	int nbins, correction * corrections){
 
 	//Compute distance and check condition
-	float xdist = voxels[vidx].x - xs[sidx];
-	float ydist = voxels[vidx].y - ys[sidx];
+	double xdist = voxels[vidx].x - xs[sidx];
+	double ydist = voxels[vidx].y - ys[sidx];
 	*active = ((abs(xdist) <= sensor_dist) && (abs(ydist) <= sensor_dist));
 
 	// Compute probability
@@ -118,17 +118,17 @@ __device__ void get_probability(float * prob, bool * active, voxel * voxels,
 	// if the sensor is not active for a particular voxel,
 	// then we will use index 0.
 	// Rounding: plus 0.5 and round down
-	int xindex = __float2int_rd((xdist - xmin) / step * (*active) + 0.5f);
-	int yindex = __float2int_rd((ydist - ymin) / step * (*active) + 0.5f);
+	int xindex = __double2int_rd((xdist - xmin) / step * (*active) + 0.5f);
+	int yindex = __double2int_rd((ydist - ymin) / step * (*active) + 0.5f);
 	int prob_idx = xindex * nbins + yindex;
 	*prob = corrections[prob_idx].factor;
 }
 
 // Launch block <1024,1,1>, grid < ceil(nvoxels/1024), 1>
-__global__ void compute_active_sensors(float * probs, bool * active, int * address, int * sensor_ids,
+__global__ void compute_active_sensors(double * probs, bool * active, int * address, int * sensor_ids,
 		int * slice_ids, int * sensor_starts, bool * sensor_actives, int * sensor_starts_addr, 
 		int * voxel_start, int nvoxels, int nsensors, int sensors_per_voxel, voxel * voxels,
-	   	float sensor_dist, float * xs, float * ys, float step, int nbins, float xmin, float ymin,
+	   	double sensor_dist, double * xs, double * ys, double step, int nbins, double xmin, double ymin,
 	   	correction * corrections){
 
 	int vidx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -143,7 +143,7 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 			int global_sidx = nsensors * slice_id + sidx;
 			int idx = base_idx + active_count;
 			//Compute distance and get probability
-			float prob;
+			double prob;
 			bool voxel_sensor;
 			get_probability(&prob, &voxel_sensor, voxels, vidx, sidx, 
 					xs, ys, sensor_dist, xmin, ymin, step, nbins, corrections);
@@ -176,12 +176,12 @@ __global__ void compute_active_sensors(float * probs, bool * active, int * addre
 	}
 }
 
-__global__ void sensor_voxel_probs(float * probs, int * sensor_starts, 
-		int * voxel_ids, int nsensors, int nslices, float * x_sensors,
-	   	float * y_sensors, voxel * voxels, int * slice_start_nc,
-	   	int * address_voxels, float sensor_dist, float * xmins, 
-		float * xmaxs, float * ymins, float * ymaxs, float xsize, 
-		float ysize, float p_xmin, float p_ymin, float step, int nbins,
+__global__ void sensor_voxel_probs(double * probs, int * sensor_starts, 
+		int * voxel_ids, int nsensors, int nslices, double * x_sensors,
+	   	double * y_sensors, voxel * voxels, int * slice_start_nc,
+	   	int * address_voxels, double sensor_dist, double * xmins, 
+		double * xmaxs, double * ymins, double * ymaxs, double xsize, 
+		double ysize, double p_xmin, double p_ymin, double step, int nbins,
 	   	correction * corrections){
 
 	//Compute sensor id and slice id
@@ -233,7 +233,7 @@ __global__ void sensor_voxel_probs(float * probs, int * sensor_starts,
 	int start_pos = sensor_starts[nsensors * slice + sid];
 	for(int vidx = start; vidx <= end; vidx++){
 		//Compute distance and get probability
-		float prob;
+		double prob;
 		bool voxel_sensor;
 		get_probability(&prob, &voxel_sensor, voxels, vidx, sid, 
 				x_sensors, y_sensors, sensor_dist, 
@@ -257,10 +257,10 @@ __global__ void compact_slices(int * slice_start,
 }
 
 // Launch grid<100,1> block <1024, 1, 1>
-__global__ void compact_probs(float * probs_in, float * probs_out, 
-		float * forward_num, int * ids_in, int * ids_out, int * slice_ids,
+__global__ void compact_probs(double * probs_in, double * probs_out, 
+		double * forward_num, int * ids_in, int * ids_out, int * slice_ids,
 	   	int * address, bool * actives, int size,
-		int nsensors, int sensors_per_voxel, float * sensors_response){
+		int nsensors, int sensors_per_voxel, double * sensors_response){
 
 	int iterations = ceilf(1.f*size / (blockDim.x*gridDim.x));
 	int grid_base = blockIdx.x * blockDim.x * iterations;
@@ -272,12 +272,12 @@ __global__ void compact_probs(float * probs_in, float * probs_out,
 			int addr = address[offset];  
 
 			if(actives[offset]){
-				float prob = probs_in[offset];
+				double prob = probs_in[offset];
 				int sensor_id = ids_in[offset];
 				probs_out[addr] = prob;
 				ids_out[addr]   = sensor_id;
 				
-				float response = sensors_response[sensor_id];
+				double response = sensors_response[sensor_id];
 				forward_num[addr] = response * prob;
 			}
 		}
@@ -310,8 +310,8 @@ __global__ void compact_sensor_start(int * starts_in, int * starts_out,
 	}
 }
 
-__global__ void forward_denom(float * denoms, int * sensor_starts,
-	   	int * sensor_start_ids, float * sensor_probs,
+__global__ void forward_denom(double * denoms, int * sensor_starts,
+	   	int * sensor_start_ids, double * sensor_probs,
 	   	int * voxel_ids, voxel * voxels, int size){
 
 	int id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -320,7 +320,7 @@ __global__ void forward_denom(float * denoms, int * sensor_starts,
 		int start = sensor_starts[id];
 		int end = sensor_starts[id+1];
 
-		float denom = 0;
+		double denom = 0;
 
 		for(int i=start; i<end; i++){
 			int vidx = voxel_ids[i];
@@ -333,17 +333,17 @@ __global__ void forward_denom(float * denoms, int * sensor_starts,
 }
 
 __global__ void mlem_step(voxel * voxels, int * pmt_voxel_starts,
-	   	float * pmt_probs, int * pmt_sensor_ids, float * pmt_nums, 
-		float * pmt_denoms, int * sipm_voxel_starts, float * sipm_probs,
-	   	int * sipm_sensor_ids, float * sipm_nums, float * sipm_denoms,
+	   	double * pmt_probs, int * pmt_sensor_ids, double * pmt_nums, 
+		double * pmt_denoms, int * sipm_voxel_starts, double * sipm_probs,
+	   	int * sipm_sensor_ids, double * sipm_nums, double * sipm_denoms,
 	   	int size){
 
 	int vidx = blockIdx.x * blockDim.x + threadIdx.x;
 
-	float pmt_eff      = 0;
-	float pmt_fwd  = 0;
-	float sipm_eff     = 0;
-	float sipm_fwd = 0;
+	double pmt_eff      = 0;
+	double pmt_fwd  = 0;
+	double sipm_eff     = 0;
+	double sipm_fwd = 0;
 
 	if(vidx < size){
 		// If sipms shouldn't be considered, the pointer would be null
@@ -356,7 +356,7 @@ __global__ void mlem_step(voxel * voxels, int * pmt_voxel_starts,
 				int sidx = sipm_sensor_ids[i];
 
 				// Check for nans
-				float value = sipm_nums[i] / sipm_denoms[sidx];
+				double value = sipm_nums[i] / sipm_denoms[sidx];
 				if(isfinite(value)){
 					sipm_fwd += value;
 				}
@@ -373,7 +373,7 @@ __global__ void mlem_step(voxel * voxels, int * pmt_voxel_starts,
 				int sidx = pmt_sensor_ids[i];
 
 				// Check for nans
-				float value = pmt_nums[i] / pmt_denoms[sidx];
+				double value = pmt_nums[i] / pmt_denoms[sidx];
 				if(isfinite(value)){
 					pmt_fwd += value;
 				}

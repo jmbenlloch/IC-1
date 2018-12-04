@@ -173,14 +173,13 @@ def build_sipm_probs_serial(selSens, selVox, probs_serial, anode):
     sensor_start = np.zeros(selVox.shape[0]+1, dtype=np.int32)
     sensor_start[1:] = selVox.sum(axis=1).cumsum()
 
-    probs = np.zeros(nprobs, dtype=np.float32)
+    probs = np.zeros(nprobs, dtype=np.float64)
     for i in range(selSens.shape[0]):
         start = voxel_start[i  ]
         end   = voxel_start[i+1]
         probs[start:end] = probs_serial[i, sensor_ids[start:end]]
 
-    fwd_nums = (anode[sensor_ids][:,1] * probs).astype(np.float32)
-
+    fwd_nums = (anode[sensor_ids][:,1] * probs).astype(np.float64)
     probs_serial_h = ResetProbs(nprobs=np.int32(probs.shape[0]),
                                  probs=probs,
                                  sensor_ids=sensor_ids,
@@ -193,7 +192,7 @@ def build_sipm_probs_serial(selSens, selVox, probs_serial, anode):
 
 def build_pmt_probs_serial(probs_serial, energies):
     nprobs = probs_serial.shape[0]
-    probs = probs_serial[:,0].astype(np.float32)
+    probs = probs_serial[:,0].astype(np.float64)
     sensor_ids = np.zeros(nprobs, dtype=np.int32)
     voxel_start = np.arange(0, nprobs+1, dtype=np.int32)
     sensor_start = np.array([0, nprobs], dtype=np.int32)
@@ -233,7 +232,7 @@ def build_pmt_sns_probs_serial(probs_h, nvoxels):
 
 
 def build_sipm_sns_probs_serial(probs_h):
-    probs     = np.zeros(probs_h.nprobs, dtype=np.float32)
+    probs     = np.zeros(probs_h.nprobs, dtype=np.float64)
     voxel_ids = np.zeros(probs_h.nprobs, dtype=np.int32)
     sensor_start = probs_h.sensor_start.copy()
     nsensors = sensor_start.shape[0] -1

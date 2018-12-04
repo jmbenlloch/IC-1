@@ -51,11 +51,11 @@ def load_and_select_peaks(pmap_file, evt, select):
     return pmap.s1s[s1_index], pmap.s2s[s2_index]
 
 def create_voxels(data_sipm, sensor_ids, charges, dist):
-    xmin = np.float32(data_sipm.X[sensor_ids].values.min()-dist)
-    xmax = np.float32(data_sipm.X[sensor_ids].values.max()+dist)
-    ymin = np.float32(data_sipm.Y[sensor_ids].values.min()-dist)
-    ymax = np.float32(data_sipm.Y[sensor_ids].values.max()+dist)
-    charge = np.float32(charges.mean())
+    xmin = np.float64(data_sipm.X[sensor_ids].values.min()-dist)
+    xmax = np.float64(data_sipm.X[sensor_ids].values.max()+dist)
+    ymin = np.float64(data_sipm.Y[sensor_ids].values.min()-dist)
+    ymax = np.float64(data_sipm.Y[sensor_ids].values.max()+dist)
+    charge = np.float64(charges.mean())
     return xmin, xmax, ymin, ymax, charge
 
 
@@ -83,17 +83,17 @@ def prepare_data(s1, s2, slice_width, data_sipm,
     #Alloc mem
     max_slices = len(s2_rebin.times)
 
-    charges    = np.empty((max_slices * nsipms), dtype='f4')
+    charges    = np.empty((max_slices * nsipms), dtype='f8')
     sensor_ids = np.empty((max_slices * nsipms), dtype='i4')
 
-    xmins   = np.empty((max_slices), dtype='f4')
-    xmaxs   = np.empty((max_slices), dtype='f4')
-    ymins   = np.empty((max_slices), dtype='f4')
-    ymaxs   = np.empty((max_slices), dtype='f4')
-    avg_charges = np.empty((max_slices), dtype='f4')
+    xmins   = np.empty((max_slices), dtype='f8')
+    xmaxs   = np.empty((max_slices), dtype='f8')
+    ymins   = np.empty((max_slices), dtype='f8')
+    ymaxs   = np.empty((max_slices), dtype='f8')
+    avg_charges = np.empty((max_slices), dtype='f8')
 
-    zs           = np.empty((max_slices), dtype='f4')
-    energies     = np.empty((max_slices), dtype='f4')
+    zs           = np.empty((max_slices), dtype='f8')
+    energies     = np.empty((max_slices), dtype='f8')
     slices_start = np.zeros((max_slices+1), dtype='i4')
 
     # Fill the arrays
@@ -206,7 +206,7 @@ def write_hdf5(voxels, slices, zs):
 def read_corrections_file(filename, node):
     corr_h5 = tb.open_file(os.path.expandvars(filename))
     corr_table = getattr(corr_h5.root, node)
-    corrections_dt = np.dtype([('x', 'f4'), ('y', 'f4'), ('factor', 'f4')])
+    corrections_dt = np.dtype([('x', 'f8'), ('y', 'f8'), ('factor', 'f8')])
 
     # we need to explicitly build it to get into memory only (x,y,factor)
     # to check: struct.unpack('f', bytes(pmts_corr.data)[i*4:(i+1)*4])
