@@ -14,24 +14,50 @@ def combine_maps(files, pmt_bins, sipm_bins, norm=False):
     pmts_counts  = np.zeros(pmt_bins)
     sipms_values = np.zeros(sipm_bins)
     sipms_counts = np.zeros(sipm_bins)
+    pmts_ivalues = np.zeros([pmt_bins, 12])
+    pmts_icounts = np.zeros([pmt_bins, 12])
+    ipmts = False
+    pmts_xs = []
+    pmts_ys = []
+    first_file = True
 
     for f in files:
         with tb.open_file(f) as h5in:
-            pmts_xs     = h5in.root.ResetMap.pmt_counts.cols.x[:]
-            pmts_ys     = h5in.root.ResetMap.pmt_counts.cols.y[:]
-            pmts_counts = pmts_counts + h5in.root.ResetMap.pmt_counts.cols.value[:]
-            pmts_values = pmts_values + h5in.root.ResetMap.pmt_values.cols.value[:]
+            if 'pmt_counts' in h5in.root.ResetMap:
+                print("Pmt sum")
+                if first_file:
+                    pmts_xs.append(h5in.root.ResetMap.pmt_counts.cols.x[:])
+                    pmts_ys.append(h5in.root.ResetMap.pmt_counts.cols.y[:])
+                pmts_counts = pmts_counts + h5in.root.ResetMap.pmt_counts.cols.value[:]
+                pmts_values = pmts_values + h5in.root.ResetMap.pmt_values.cols.value[:]
+            else:
+                print("Individual pmts")
+                ipmts = True
+                for i in range(12):
+                    counts_table = "pmt{}_counts".format(i)
+                    values_table = "pmt{}_values".format(i)
+                    if first_file:
+                        pmts_xs.append(h5in.root.ResetMap[counts_table].cols.x[:])
+                        pmts_ys.append(h5in.root.ResetMap[counts_table].cols.y[:])
+                    pmts_icounts[:,i] = pmts_icounts[:,i] + h5in.root.ResetMap[counts_table].cols.value[:]
+                    pmts_ivalues[:,i] = pmts_ivalues[:,i] + h5in.root.ResetMap[values_table].cols.value[:]
 
             sipms_xs     = h5in.root.ResetMap.sipm_counts.cols.x[:]
             sipms_ys     = h5in.root.ResetMap.sipm_counts.cols.y[:]
             sipms_counts = sipms_counts + h5in.root.ResetMap.sipm_counts.cols.value[:]
             sipms_values = sipms_values + h5in.root.ResetMap.sipm_values.cols.value[:]
 
-    pmts_counts [pmts_counts  == 0] = 1
-    sipms_counts[sipms_counts == 0] = 1
+            first_file = False
 
-    pmt_factors  = (pmts_values  / pmts_counts ).flatten()
+    sipms_counts[sipms_counts == 0] = 1
     sipm_factors = (sipms_values / sipms_counts).flatten()
+
+    if ipmts:
+        pmts_icounts [pmts_icounts  == 0] = 1
+        pmt_factors  = pmts_ivalues / pmts_icounts
+    else:
+        pmts_counts [pmts_counts  == 0] = 1
+        pmt_factors  = (pmts_values  / pmts_counts ).flatten()
 
     if norm:
         pmt_factors = pmt_factors.max() / pmt_factors
@@ -45,7 +71,10 @@ def combine_maps(files, pmt_bins, sipm_bins, norm=False):
 def get_nbins(files):
     pmt_bins, sipm_bins = 0, 0
     with tb.open_file(files[0]) as h5in:
-        pmt_bins  = h5in.root.ResetMap.pmt_counts .shape[0]
+        if 'pmt_counts' in h5in.root.ResetMap:
+            pmt_bins  = h5in.root.ResetMap.pmt_counts .shape[0]
+        else:
+            pmt_bins  = h5in.root.ResetMap.pmt0_counts .shape[0]
         sipm_bins = h5in.root.ResetMap.sipm_counts.shape[0]
         return pmt_bins, sipm_bins
 
@@ -97,19 +126,30 @@ if __name__ == '__main__':
 
     files = glob(maps_path + '/*h5')
 
-    pmt_plot  = map_file + '_pmts.png'
-    sipm_plot = map_file + '_sipms.png'
 
     pmt_bins, sipm_bins = get_nbins(files)
 
     pmts_xs, pmts_ys, pmt_values, sipms_xs, sipms_ys, sipm_values = combine_maps(files, pmt_bins, sipm_bins, norm)
 
-    make_plot(pmts_xs , pmts_ys , pmt_values , pmt_plot)
+    if len(pmts_xs) == 1: # individual pmts
+        pmt_plot  = map_file + '_pmts.png'
+        make_plot(pmts_xs[0] , pmts_ys[0] , pmt_values , pmt_plot)
+    else:
+        for i in range(12):
+            pmt_plot  = map_file + '_pmt{}.png'.format(i)
+            make_plot(pmts_xs[i] , pmts_ys[i] , pmt_values[:,i] , pmt_plot)
+
+    sipm_plot = map_file + '_sipms.png'
     make_plot(sipms_xs, sipms_ys, sipm_values, sipm_plot)
 
     with tb.open_file(map_file, 'w') as h5out:
-        writer_pmt  = map_writer(h5out, 'PMT')
         writer_sipm = map_writer(h5out, 'SiPM')
-
-        writer_pmt (pmt_values , pmts_xs , pmts_ys)
         writer_sipm(sipm_values, sipms_xs, sipms_ys)
+
+        if pmt_values.shape[-1] == 12: #ipmts
+            for i in range(pmt_values.shape[-1]):
+                writer_pmt = map_writer(h5out, 'PMT{}'.format(i))
+                writer_pmt (pmt_values[i] , pmts_xs[i] , pmts_ys[i])
+        else:
+            writer_pmt  = map_writer(h5out, 'PMT')
+            writer_pmt (pmt_values , pmts_xs[0] , pmts_ys[0])
