@@ -56,7 +56,7 @@ def computeProb(pmt_xy_map, sipm_xy_map, voxDX, voxDY, voxX, voxY):
     xyprob = [sipm_xy_map(voxDX[j], voxDY[j]).value for j in range(len(voxDX))]
     pmtprob = []
     for j in range(len(voxDX)):
-        pmtprob.append([pmt_xy_map(voxX[j], voxY[j]).value])
+        pmtprob.append([pmt_xy_map[i](voxX[j], voxY[j]).value for i in range(len(pmt_xy_map))])
     return np.array(xyprob), np.array(pmtprob)
 
 

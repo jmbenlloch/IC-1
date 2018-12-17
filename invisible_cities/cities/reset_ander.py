@@ -23,7 +23,18 @@ class Reset_ander(ResetCity):
     def __init__(self, **kwds):
         super().__init__(**kwds)
         self.sipm_xy_map = dstf.load_xy_corrections(self.conf.sipm_param, group="ResetMap", node="SiPM")
-        self.pmt_xy_map  = dstf.load_xy_corrections(self.conf.pmt_param,  group="ResetMap", node="PMT")
+
+        self.pmt_xy_map = []
+        if self.conf.ipmts:
+            for i in range(12):
+                param = dstf.load_xy_corrections(self.conf.pmt_param,
+                                                        group="ResetMap",
+                                                        node="PMT{}".format(i))
+                self.pmt_xy_map.append(param)
+        else:
+            self.pmt_xy_map.append(dstf.load_xy_corrections(self.conf.pmt_param,
+                                                        group="ResetMap",
+                                                        node="PMT"))
 
     def get_writers(self, h5out):
         writers = Namespace(dst = self.write_parameters,
@@ -57,7 +68,11 @@ class Reset_ander(ResetCity):
             s2_rebin = pmapsf.rebin_peak(s2, self.conf.rebin_factor)
             for tbin, t in enumerate(s2_rebin.times):
                 z = (s2_rebin.times[tbin] - t0) / 1000.
-                s2e = s2_rebin.pmts.sum_over_sensors[tbin]
+
+                if self.conf.ipmts:
+                    s2e =  s2_rebin.pmts.time_slice(tbin)
+                else:
+                    s2e = [s2_rebin.pmts.sum_over_sensors[tbin]]
 
                 charge  = s2_rebin.sipms.time_slice(tbin)
 
@@ -81,11 +96,11 @@ class Reset_ander(ResetCity):
                                              self.conf.y_size, self.conf.rmax)
                 anode_response = rst_ander.CreateSiPMresponse(self.DataSiPM, ids, charge,
                                                               self.conf.sipm_dist, min_charge, vox)
-                cath_response = np.array([s2e])
+                cath_response = np.array(s2e)
                 voxDX, voxDY = rst_ander.computeDiff(self.DataSiPM, vox, anode_response)
                 selVox, selSens = rst_ander.createSel(voxDX, voxDY, anode_response, self.conf.sipm_dist)
                 sipm_prob, pmt_prob = rst_ander.computeProb(self.pmt_xy_map, self.sipm_xy_map,
-                                                            voxDX, voxDY, vox[0], vox[1])
+                                                                voxDX, voxDY, vox[0], vox[1])
                 imageIter = vox
 
                 for j in range(self.conf.iterations):
