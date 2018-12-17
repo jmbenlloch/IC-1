@@ -149,7 +149,7 @@ if __name__ == '__main__':
         if pmt_values.shape[-1] == 12: #ipmts
             for i in range(pmt_values.shape[-1]):
                 writer_pmt = map_writer(h5out, 'PMT{}'.format(i))
-                writer_pmt (pmt_values[i] , pmts_xs[i] , pmts_ys[i])
+                writer_pmt (pmt_values[:,i] , pmts_xs[i] , pmts_ys[i])
         else:
             writer_pmt  = map_writer(h5out, 'PMT')
             writer_pmt (pmt_values , pmts_xs[0] , pmts_ys[0])
