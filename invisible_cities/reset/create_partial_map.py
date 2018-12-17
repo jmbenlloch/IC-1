@@ -115,8 +115,12 @@ def compute_position_and_charges_ipmts(hits_dict, pmaps, pmt_xs, pmt_ys, sipm_xs
         pmts[idx] = pmt_sum
 
         # Pmts
-        pmt_xdists[idx] = positions[idx][0] - pmt_xs
-        pmt_ydists[idx] = positions[idx][1] - pmt_ys
+        # relative positions
+        #pmt_xdists[idx] = positions[idx][0] - pmt_xs
+        #pmt_ydists[idx] = positions[idx][1] - pmt_ys
+        # absolute positions
+        pmt_xdists[idx] = positions[idx][0]
+        pmt_ydists[idx] = positions[idx][1]
 
         # Sipms
         sipm_x_dists = positions[idx][0] - sipm_xs
