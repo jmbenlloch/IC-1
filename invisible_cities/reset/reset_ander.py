@@ -216,7 +216,7 @@ def build_pmt_sns_probs_serial(probs_h, nvoxels):
         end   = probs_h.voxel_start[i+1]
         if end > start:
             voxel_ids[i] = True
-    voxel_ids = np.where(voxel_ids)[0]
+    voxel_ids = np.where(voxel_ids)[0].astype(np.int32)
 
     nsensors = 1
     sensor_start = np.array([0, len(probs)], dtype=np.int32)
@@ -234,11 +234,11 @@ def build_pmt_sns_probs_serial(probs_h, nvoxels):
 def build_sipm_sns_probs_serial(probs_h):
     probs     = np.zeros(probs_h.nprobs, dtype=np.float64)
     voxel_ids = np.zeros(probs_h.nprobs, dtype=np.int32)
-    sensor_start = probs_h.sensor_start.copy()
+    sensor_start = probs_h.sensor_start.copy().astype(np.int32)
     nsensors = sensor_start.shape[0] -1
 
     sensor_offset    = np.zeros_like(probs_h.sensor_start)
-    sensor_start_ids = np.zeros_like(probs_h.sensor_start)
+    sensor_start_ids = np.zeros_like(probs_h.sensor_start).astype(np.int32)
 
     voxel_idx = 0
 
