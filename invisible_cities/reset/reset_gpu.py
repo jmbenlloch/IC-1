@@ -259,7 +259,10 @@ def create_voxels(cudaf, scan, voxels_data_d, xsize, ysize,
 def create_anode_response(cudaf, slices_data_d):
     total_sensors = int(slices_data_d.nslices * slices_data_d.nsensors)
     anode_response_d = cuda.mem_alloc(total_sensors * 8)
-    cuda.memset_d32(anode_response_d, 0, total_sensors)
+    #cuda.memset_d32(anode_response_d, 0, total_sensors)
+    cuda.memset_d16(anode_response_d, 0, 4 * total_sensors) # 64 bytes
+    anode_h = cuda.from_device(anode_response_d, (slices_data_d.nsensors), np.dtype('f8'))
+    print("anode_sum: ", anode_h.sum())
 
     create_anode = cudaf.get_function('create_anode_response')
     create_anode(anode_response_d,
