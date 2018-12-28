@@ -56,11 +56,13 @@ def create_voxels(data_sipm, sensor_ids, charges, dist):
     ymin = np.float64(data_sipm.Y[sensor_ids].values.min()-dist)
     ymax = np.float64(data_sipm.Y[sensor_ids].values.max()+dist)
     charge = np.float64(charges.mean())
+    print(xmin, xmax, ymin, ymax, charge)
     return xmin, xmax, ymin, ymax, charge
 
 
 def nvoxels(xmin, xmax, xsize, ymin, ymax, ysize):
-    return ((xmax - xmin)/ xsize + 1) * ((ymax - ymin)/ ysize + 1)
+    #return ((xmax - xmin)/ xsize + 1) * ((ymax - ymin)/ ysize + 1)
+    return ((xmax - xmin)/ xsize) * ((ymax - ymin)/ ysize)
 
 
 def rebin_s2si(s2, s2si, rf):
