@@ -29,8 +29,10 @@ __global__ void create_voxels(voxel * voxels,
 	int ymin = ymins[blockIdx.x];
 	int ymax = ymaxs[blockIdx.x];
 	// +1 to include last column/row
-	int xsteps = (xmax - xmin) / xsize + 1;
-	int ysteps = (ymax - ymin) / ysize + 1;
+	//int xsteps = (xmax - xmin) / xsize + 1;
+	//int ysteps = (ymax - ymin) / ysize + 1;
+	int xsteps = (xmax - xmin) / xsize;
+	int ysteps = (ymax - ymin) / ysize;
 
 	int iterations = ceilf(1.f*(xsteps*ysteps)/blockDim.x);
 
@@ -39,7 +41,8 @@ __global__ void create_voxels(voxel * voxels,
 		double x = xmin + (vid / ysteps) * xsize;
 		double y = ymin + (vid % ysteps) * xsize;
 
-		if(x <= xmax && y <= ymax){
+		//if(x <= xmax && y <= ymax){
+		if(x < xmax && y < ymax){
 			bool active = sqrtf(x*x + y*y) < rmax;
 			voxel * v = voxels + offset + vid;
 			v->x = x;
