@@ -2,6 +2,7 @@ import numpy as np
 import tables as tb
 import numba
 import scipy
+import pdb
 
 from invisible_cities.evm.ic_containers import ResetProbs
 from invisible_cities.evm.ic_containers import ResetSnsProbs
@@ -158,26 +159,40 @@ def compute_likelihood(forward_proj, sns_response):
     return likelihood.sum()
 
 
-def build_sipm_probs_serial(selSens, selVox, probs_serial, anode):
+def build_sipm_probs_serial(selSens, selVox, probs_serial, anode, slices_start):
     nprobs = selSens.sum().sum()
 
     voxel_start = np.zeros(selSens.shape[0]+1, dtype=np.int32)
     voxel_start[1:] = selSens.sum(axis=1).cumsum()
 
     sensor_ids = np.zeros(nprobs, dtype=np.int32)
+    sliceid = 0
     for i in range(selSens.shape[0]):
+        if i >= slices_start[sliceid+1]:
+            sliceid = sliceid + 1
+
         vstart = voxel_start[i  ]
         vend   = voxel_start[i+1]
-        sensor_ids[vstart:vend] = np.where(selSens[i])[0]
+        sensor_ids[vstart:vend] = np.where(selSens[i])[0] + sliceid * 1792
 
-    sensor_start = np.zeros(selVox.shape[0]+1, dtype=np.int32)
-    sensor_start[1:] = selVox.sum(axis=1).cumsum()
+
+    nslices = len(slices_start) - 1
+    sensor_start = np.zeros(1 + nslices * 1792, dtype=np.int32)
+    for i in range(nslices):
+        start = slices_start[i]
+        end   = slices_start[i+1]
+
+        sstart = 1 +  i    * 1792
+        send   = 1 + (i+1) * 1792
+        offset = sensor_start[sstart - 1]
+        sensor_start[sstart:send] = selVox[:, start:end].sum(axis=1).cumsum() + offset
 
     probs = np.zeros(nprobs, dtype=np.float64)
     for i in range(selSens.shape[0]):
         start = voxel_start[i  ]
         end   = voxel_start[i+1]
-        probs[start:end] = probs_serial[i, sensor_ids[start:end]]
+        sids  = sensor_ids[start:end] % 1792
+        probs[start:end] = probs_serial[i, sids]
 
     fwd_nums = (anode[sensor_ids][:,1] * probs).astype(np.float64)
     probs_serial_h = ResetProbs(nprobs=np.int32(probs.shape[0]),
@@ -186,17 +201,24 @@ def build_sipm_probs_serial(selSens, selVox, probs_serial, anode):
                                  voxel_start=voxel_start,
                                  sensor_start=sensor_start,
                                  fwd_nums=fwd_nums)
-
     return probs_serial_h
 
 
-def build_pmt_probs_serial(probs_serial, energies):
+def build_pmt_probs_serial(probs_serial, energies, slices_start):
     nprobs = probs_serial.shape[0]
     probs = probs_serial[:,0].astype(np.float64)
     sensor_ids = np.zeros(nprobs, dtype=np.int32)
     voxel_start = np.arange(0, nprobs+1, dtype=np.int32)
-    sensor_start = np.array([0, nprobs], dtype=np.int32)
-    fwd_nums = energies * probs
+    sensor_start = slices_start.astype(dtype=np.int32)
+    fwd_nums = np.zeros(nprobs, dtype=np.float64)
+
+    for i in range(slices_start.shape[0]-1):
+        print(i, slices_start[i], slices_start[i+1])
+        start = slices_start[i]
+        end   = slices_start[i+1]
+        fwd_nums[start:end] = energies[i] * probs[start:end]
+
+        sensor_ids[start:end] = i
 
     probs_serial_h = ResetProbs(nprobs=np.int32(nprobs),
                                  probs=probs,
@@ -218,9 +240,9 @@ def build_pmt_sns_probs_serial(probs_h, nvoxels):
             voxel_ids[i] = True
     voxel_ids = np.where(voxel_ids)[0].astype(np.int32)
 
-    nsensors = 1
-    sensor_start = np.array([0, len(probs)], dtype=np.int32)
-    sensor_start_ids = np.array([0], dtype=np.int32)
+    nsensors = probs_h.sensor_start.shape[0] - 1
+    sensor_start = probs_h.sensor_start
+    sensor_start_ids = np.arange(nsensors, dtype=np.int32)
 
     sns_probs_h = ResetSnsProbs(probs            = probs,
                                 voxel_ids        = voxel_ids,
@@ -235,7 +257,6 @@ def build_sipm_sns_probs_serial(probs_h):
     probs     = np.zeros(probs_h.nprobs, dtype=np.float64)
     voxel_ids = np.zeros(probs_h.nprobs, dtype=np.int32)
     sensor_start = probs_h.sensor_start.copy().astype(np.int32)
-    nsensors = sensor_start.shape[0] -1
 
     sensor_offset    = np.zeros_like(probs_h.sensor_start)
     sensor_start_ids = np.zeros_like(probs_h.sensor_start).astype(np.int32)
@@ -255,11 +276,14 @@ def build_sipm_sns_probs_serial(probs_h):
         voxel_ids[sensor_idx] = voxel_idx
         sensor_start_ids[sid] = sid
 
+    sensor_start_ids = np.where (np.diff(probs_h.sensor_start))[0]
+    sensor_start     = np.unique(probs_h.sensor_start)
+    nsensors         = sensor_start.shape[0] - 1
+
     sns_probs_h = ResetSnsProbs(probs            = probs,
                                 voxel_ids        = voxel_ids,
                                 nsensors         = np.int32(nsensors),
                                 sensor_start     = sensor_start,
                                 sensor_start_ids = sensor_start_ids)
-
     return sns_probs_h
 

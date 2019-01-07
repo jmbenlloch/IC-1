@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import os
+import pdb
 
 import invisible_cities.database.load_db as dbf
 
@@ -137,20 +138,27 @@ class RESET:
             voxels_serial = np.array(([v[0] for v in rst_voxels_h.voxels], [v[1] for v in rst_voxels_h.voxels]))
 
             # get anode response
-            anode_h = cuda.from_device(anode_d, (slices_data_d.nsensors), np.dtype('f8'))
-            anode_serial = np.zeros([1792, 2])
-            anode_serial[:,0] = np.arange(0, 1792)
+            nsensors_anode = slices_data_d.nsensors * slices_data_d.nslices
+            anode_h = cuda.from_device(anode_d, (nsensors_anode), np.dtype('f8'))
+            anode_serial = np.zeros([nsensors_anode, 2])
+            #anode_serial[:,0] = np.arange(0, nsensors_anode)
+            anode_serial[:,0] = np.arange(0, nsensors_anode) % 1792 # use DB sensor ids
             anode_serial[:,1] = anode_h
 
-            sipm_probs_h, sipm_sns_probs_h, pmt_probs_h, pmt_sns_probs_h = compute_probs_serial(self.data_sipm, voxels_serial, anode_serial, energies, self.sipm_dist, rst_voxels.nvoxels, self.pmt_xy_map, self.sipm_xy_map)
+            sipm_probs_h, sipm_sns_probs_h, pmt_probs_h, pmt_sns_probs_h = compute_probs_serial(self.data_sipm, voxels_serial, rst_voxels_h.slice_start, anode_serial, energies, self.sipm_dist, rst_voxels.nvoxels, self.pmt_xy_map, self.sipm_xy_map)
             sipm_probs     = rst_mem.copy_probs_h2d       (sipm_probs_h)
             pmt_probs      = rst_mem.copy_probs_h2d       (pmt_probs_h)
-            sipm_sns_probs = rst_mem.copy_sensor_probs_d2h(sipm_sns_probs_h)
-            pmt_sns_probs  = rst_mem.copy_sensor_probs_d2h(pmt_sns_probs_h)
+            sipm_sns_probs = rst_mem.copy_sensor_probs_h2d(sipm_sns_probs_h)
+            pmt_sns_probs  = rst_mem.copy_sensor_probs_h2d(pmt_sns_probs_h)
         else:
             print("parallel mode")
             sipm_probs, sipm_sns_probs, pmt_probs, pmt_sns_probs = self.compute_gpu_probs(
                             rst_voxels, slices_start_nc_d, anode_d, cath_d, voxels_data_d)
+
+            sipm_probs_h     = rst_mem.copy_probs_d2h(sipm_probs, rst_voxels.nvoxels, slices.nslices, slices.nsensors)
+            pmt_probs_h      = rst_mem.copy_probs_d2h(pmt_probs , rst_voxels.nvoxels, slices.nslices, 1)
+            pmt_sns_probs_h  = rst_mem.copy_sensor_probs_d2h(pmt_sns_probs, pmt_probs.nprobs)
+            sipm_sns_probs_h = rst_mem.copy_sensor_probs_d2h(sipm_sns_probs, sipm_probs.nprobs)
 
         voxels_h = compute_mlem(self.cudaf, iterations, rst_voxels,
                      voxels_data_d.nslices,
@@ -205,14 +213,14 @@ class RESET:
         return sipm_probs, sipm_sns_probs, pmt_probs, pmt_sns_probs
 
 
-def compute_probs_serial(data_sipm, voxels, anode_response, energies, sipm_dist, nvoxels, pmt_xy_map, sipm_xy_map):
-    voxDX, voxDY = rst_serial.computeDiff(data_sipm, voxels, anode_response)
-    selVox, selSens = rst_serial.createSel(voxDX, voxDY, anode_response, sipm_dist)
+def compute_probs_serial(data_sipm, voxels, slices_start, anode_response, energies, sipm_dist, nvoxels, pmt_xy_map, sipm_xy_map):
+    voxDX, voxDY = rst_serial.computeDiff(data_sipm, voxels, anode_response[:1792])
+    selVox, selSens = rst_serial.createSel(voxDX, voxDY, anode_response[:1792], sipm_dist)
     sipm_probs_serial, pmt_probs_serial = rst_serial.computeProb(pmt_xy_map, sipm_xy_map, voxDX, voxDY, voxels[0], voxels[1])
 
-    sipm_probs_serial_h = rst_serial.build_sipm_probs_serial(selSens, selVox, sipm_probs_serial, anode_response)
+    sipm_probs_serial_h = rst_serial.build_sipm_probs_serial(selSens, selVox, sipm_probs_serial, anode_response, slices_start)
     sipm_sns_probs_serial_h = rst_serial.build_sipm_sns_probs_serial(sipm_probs_serial_h)
-    pmt_probs_serial_h = rst_serial.build_pmt_probs_serial(pmt_probs_serial, energies)
+    pmt_probs_serial_h = rst_serial.build_pmt_probs_serial(pmt_probs_serial, energies, slices_start)
     pmt_sns_probs_serial_h = rst_serial.build_pmt_sns_probs_serial(pmt_probs_serial_h, nvoxels)
 
     return sipm_probs_serial_h, sipm_sns_probs_serial_h, pmt_probs_serial_h, pmt_sns_probs_serial_h
@@ -261,8 +269,6 @@ def create_anode_response(cudaf, slices_data_d):
     anode_response_d = cuda.mem_alloc(total_sensors * 8)
     #cuda.memset_d32(anode_response_d, 0, total_sensors)
     cuda.memset_d16(anode_response_d, 0, 4 * total_sensors) # 64 bytes
-    anode_h = cuda.from_device(anode_response_d, (slices_data_d.nsensors), np.dtype('f8'))
-    print("anode_sum: ", anode_h.sum())
 
     create_anode = cudaf.get_function('create_anode_response')
     create_anode(anode_response_d,
