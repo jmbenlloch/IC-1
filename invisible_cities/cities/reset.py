@@ -24,6 +24,7 @@ class Reset(ResetCity):
                          mc  = self.get_mc_info_writer(h5out))
 
     def create_dst_event(self, pmapVectors, filter_output):
+        print("Run city evt: ", pmapVectors.events)
         s1_index = np.argmax(filter_output.s1_peaks)
         s2_index = np.argmax(filter_output.s2_peaks)
 
@@ -89,6 +90,7 @@ class Reset(ResetCity):
             print("array_fill: {}".format(t1-t0))
 
 #        return voxels_out
+        print("RESET Energy: ", sum([v[2] for v in voxels_out[:voxel_idx]]))
         return voxels_out[:voxel_idx]
 
     def write_parameters(self, h5out):

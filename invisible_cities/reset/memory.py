@@ -85,7 +85,7 @@ def copy_probs_h2d(probs_h):
     rst_probs = ResetProbs(nprobs, probs_d, sensor_ids_d, voxel_start_d, sensor_start_d, fwd_num_d)
     return rst_probs
 
-def copy_sensor_probs_d2h(sns_probs_h):
+def copy_sensor_probs_h2d(sns_probs_h):
     nsensors    = sns_probs_h.nsensors
     sns_probs_d = cuda.to_device(sns_probs_h.probs)
     voxel_ids_d = cuda.to_device(sns_probs_h.voxel_ids)
