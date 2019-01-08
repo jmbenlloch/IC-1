@@ -147,11 +147,42 @@ def compute_histogram(xs, ys, energies, nbins, range=None):
 
     return xedges, yedges, values, counts
 
+def build_coords(xs, ys, zs):
+    xbins = len(xs)
+    ybins = len(ys)
+    zbins = len(zs)
+
+    xs = np.repeat(xs, xbins*ybins)
+    ys = np.tile(np.repeat(ys, zbins), xbins)
+    zs = np.tile(zs, xbins*ybins)
+
+    return xs, ys, zs
+
+
+def compute_histogram3d(positions, energies, bins, range=None):
+    ones = np.ones_like(energies)
+    values, edges = np.histogramdd(positions, weights=energies, range=range, bins=bins)
+    counts, _     = np.histogramdd(positions, weights=ones, range=range, bins=bins)
+
+    xedges = shift_to_bin_centers(edges[0])
+    yedges = shift_to_bin_centers(edges[1])
+    zedges = shift_to_bin_centers(edges[2])
+
+    xs, ys, zs = build_coords(xedges, yedges, zedges)
+
+    return xs, ys, zs, values, counts
+
 
 class ResetPartialMapTable(tb.IsDescription):
     x           = tb.Float32Col(pos=0)
     y           = tb.Float32Col(pos=1)
     value       = tb.Float32Col(pos=2)
+
+class ResetPartial3dMapTable(tb.IsDescription):
+    x           = tb.Float32Col(pos=0)
+    y           = tb.Float32Col(pos=1)
+    z           = tb.Float32Col(pos=2)
+    value       = tb.Float32Col(pos=3)
 
 # writers
 def map_writer(hdf5_file, table_name, *, compression='ZLIB4'):
@@ -172,13 +203,35 @@ def map_writer(hdf5_file, table_name, *, compression='ZLIB4'):
 
     return write_map
 
+# writers
+def map3d_writer(hdf5_file, table_name, *, compression='ZLIB4'):
+    map_table  = make_table(hdf5_file,
+                            group       = 'ResetMap',
+                            name        = table_name,
+                            fformat     = ResetPartial3dMapTable,
+                            description = 'Probability map',
+                            compression = compression)
+
+    def write_map(probs, xs, ys, zs):
+        for p, x, y, z in zip(probs, xs, ys, zs):
+            row = map_table.row
+            row["x"    ] = x
+            row["y"    ] = y
+            row["z"    ] = z
+            row["value"] = p
+            row.append()
+
+    return write_map
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-pmaps", required=True)
-    parser.add_argument("-o"    , required=True)
-    parser.add_argument("-pmts" , required=True)
-    parser.add_argument("-sipms", required=True)
-    parser.add_argument("-ipmts", action="store_true")
+    parser.add_argument("-pmaps" , required=True)
+    parser.add_argument("-o"     , required=True)
+    parser.add_argument("-pmts"  , required=True)
+    parser.add_argument("-sipms" , required=True)
+    parser.add_argument("-zbins" , required=False)
+    parser.add_argument("-ipmts" , action="store_true")
+    parser.add_argument("-full3d", action="store_true")
 
     args = parser.parse_args(sys.argv[1:])
     pmaps_file = args.pmaps
@@ -209,12 +262,22 @@ if __name__ == '__main__':
         # PMT maps
         nbins = pmt_bins
         if not args.ipmts:
-            range = [[-200, 200], [-200, 200]]
-            xedges, yedges, values, counts = compute_histogram(xs, ys, pmts, nbins, range=range)
-            write_pmt_values  = map_writer(h5out, 'pmt_values')
-            write_pmt_counts  = map_writer(h5out, 'pmt_counts')
-            write_pmt_values(values.flatten(), xedges, yedges)
-            write_pmt_counts(counts.flatten(), xedges, yedges)
+            if not args.full3d:
+                range = [[-200, 200], [-200, 200]]
+                xedges, yedges, values, counts = compute_histogram(xs, ys, pmts, nbins, range=range)
+                write_pmt_values  = map_writer(h5out, 'pmt_values')
+                write_pmt_counts  = map_writer(h5out, 'pmt_counts')
+                write_pmt_values(values.flatten(), xedges, yedges)
+                write_pmt_counts(counts.flatten(), xedges, yedges)
+            else:
+                range = [[-200, 200], [-200, 200], [0, 600]]
+                bins  = [nbins, nbins, int(args.zbins)]
+                xs, ys, zs, values, counts = compute_histogram3d(positions, pmts, bins, range)
+                write_pmt_values  = map3d_writer(h5out, 'pmt_values')
+                write_pmt_counts  = map3d_writer(h5out, 'pmt_counts')
+                write_pmt_values(values.flatten(), xs, ys, zs)
+                write_pmt_counts(counts.flatten(), xs, ys, zs)
+
         else:
             for i in np.arange(12):
                 range = [[-200, 200], [-200, 200]]
@@ -226,10 +289,20 @@ if __name__ == '__main__':
                 write_pmt_counts(counts.flatten(), xedges, yedges)
 
         # SiPM maps
-        nbins = sipm_bins
-        range = [[-30, 30], [-30, 30]]
-        xedges, yedges, values, counts = compute_histogram(sipm_xs, sipm_ys, sipm_es, nbins, range=range)
-        write_sipm_values = map_writer(h5out, 'sipm_values')
-        write_sipm_counts = map_writer(h5out, 'sipm_counts')
-        write_sipm_values(values.flatten(), xedges, yedges)
-        write_sipm_counts(counts.flatten(), xedges, yedges)
+        if not args.full3d:
+            nbins = sipm_bins
+            range = [[-30, 30], [-30, 30]]
+            xedges, yedges, values, counts = compute_histogram(sipm_xs, sipm_ys, sipm_es, nbins, range=range)
+            write_sipm_values = map_writer(h5out, 'sipm_values')
+            write_sipm_counts = map_writer(h5out, 'sipm_counts')
+            write_sipm_values(values.flatten(), xedges, yedges)
+            write_sipm_counts(counts.flatten(), xedges, yedges)
+        else:
+            bins = [sipm_bins, sipm_bins, int(args.zbins)]
+            range = [[-30, 30], [-30, 30], [0, 600]]
+            sipm_positions = (sipm_xs, sipm_ys, np.repeat(positions[:, 2], 1792))
+            xs, ys, zs, values, counts = compute_histogram3d(sipm_positions, sipm_es, bins, range)
+            write_sipm_values = map3d_writer(h5out, 'sipm_values')
+            write_sipm_counts = map3d_writer(h5out, 'sipm_counts')
+            write_sipm_values(values.flatten(), xs, ys, zs)
+            write_sipm_counts(counts.flatten(), xs, ys, zs)
