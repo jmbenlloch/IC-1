@@ -276,8 +276,8 @@ def build_sipm_sns_probs_serial(probs_h):
         voxel_ids[sensor_idx] = voxel_idx
         sensor_start_ids[sid] = sid
 
-    sensor_start_ids = np.where (np.diff(probs_h.sensor_start))[0]
-    sensor_start     = np.unique(probs_h.sensor_start)
+    sensor_start_ids = np.where (np.diff(probs_h.sensor_start))[0].astype(np.int32)
+    sensor_start     = np.unique(probs_h.sensor_start).astype(np.int32)
     nsensors         = sensor_start.shape[0] - 1
 
     sns_probs_h = ResetSnsProbs(probs            = probs,
