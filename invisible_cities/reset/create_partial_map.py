@@ -70,7 +70,7 @@ def compute_position_and_charges(hits_dict, pmaps, sipm_xs, sipm_ys):
 
         idx = idx + 1
 
-    return positions[:idx], pmts[:idx], sipm_es[:idx], sipm_xdists[:idx], sipm_ydists[:idx]
+    return positions[:idx], pmts[:idx], sipm_es[:idx*1792], sipm_xdists[:idx*1792], sipm_ydists[:idx*1792]
 
 def compute_position_and_charges_ipmts(hits_dict, pmaps, pmt_xs, pmt_ys, sipm_xs, sipm_ys):
     nevents   = len(pmaps)
@@ -84,6 +84,7 @@ def compute_position_and_charges_ipmts(hits_dict, pmaps, pmt_xs, pmt_ys, sipm_xs
     sipm_xdists = np.zeros(nevents*1792)
     sipm_ydists = np.zeros(nevents*1792)
 
+    #TODO: Fix bug in here. If there is some missing event, there will be zeros/empty
     for idx, evt in enumerate(pmaps.keys()):
         hits = hits_dict[evt]
         print(idx, evt)
