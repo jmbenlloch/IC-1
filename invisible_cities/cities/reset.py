@@ -90,7 +90,7 @@ class Reset(ResetCity):
             print("array_fill: {}".format(t1-t0))
 
 #        return voxels_out
-        print("RESET Energy: ", sum([v[2] for v in voxels_out[:voxel_idx]]))
+        print("RESET Energy: ", sum([v[4] for v in voxels_out[:voxel_idx]]))
         return voxels_out[:voxel_idx]
 
     def write_parameters(self, h5out):
