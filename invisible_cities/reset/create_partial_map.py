@@ -84,8 +84,8 @@ def compute_position_and_charges_ipmts(hits_dict, pmaps, pmt_xs, pmt_ys, sipm_xs
     sipm_xdists = np.zeros(nevents*1792)
     sipm_ydists = np.zeros(nevents*1792)
 
-    #TODO: Fix bug in here. If there is some missing event, there will be zeros/empty
-    for idx, evt in enumerate(pmaps.keys()):
+    idx = 0
+    for evt in pmaps.keys():
         hits = hits_dict[evt]
         print(idx, evt)
         # MC True position
@@ -131,7 +131,9 @@ def compute_position_and_charges_ipmts(hits_dict, pmaps, pmt_xs, pmt_ys, sipm_xs
         sipm_xdists[idx*1792:(idx+1)*1792] = sipm_x_dists
         sipm_ydists[idx*1792:(idx+1)*1792] = sipm_y_dists
 
-    return pmts, pmt_xdists, pmt_ydists, sipm_es, sipm_xdists, sipm_ydists
+        idx = idx + 1
+
+    return pmts[:idx], pmt_xdists[:idx], pmt_ydists[:idx], sipm_es[:idx*1792], sipm_xdists[:idx*1792], sipm_ydists[:idx*1792]
 
 
 def compute_histogram(xs, ys, energies, nbins, range=None):
