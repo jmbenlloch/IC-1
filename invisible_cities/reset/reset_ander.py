@@ -61,7 +61,7 @@ def computeProb(pmt_xy_map, sipm_xy_map, voxDX, voxDY, voxX, voxY):
     xyprob = [sipm_xy_map(voxDX[j], voxDY[j]).value for j in range(len(voxDX))]
     pmtprob = []
     for j in range(len(voxDX)):
-        pmtprob.append([pmt_xy_map(voxX[j], voxY[j]).value])
+        pmtprob.append([pmt_xy_map[i](voxX[j], voxY[j]).value for i in range(len(pmt_xy_map))])
     return np.array(xyprob), np.array(pmtprob)
 
 
@@ -205,20 +205,32 @@ def build_sipm_probs_serial(selSens, selVox, probs_serial, anode, slices_start):
 
 
 def build_pmt_probs_serial(probs_serial, energies, slices_start):
-    nprobs = probs_serial.shape[0]
-    probs = probs_serial[:,0].astype(np.float64)
+#    nprobs = probs_serial.shape[0]
+    nslices = slices_start.shape[0]-1
+    voxels_in_slice = np.diff(slices_start)
+    nvoxels, npmts = probs_serial.shape
+    nprobs = nvoxels * npmts
+    probs = probs_serial.flatten().astype(np.float64)
     sensor_ids = np.zeros(nprobs, dtype=np.int32)
-    voxel_start = np.arange(0, nprobs+1, dtype=np.int32)
-    sensor_start = slices_start.astype(dtype=np.int32)
+    voxel_start = np.arange(0, nvoxels+1, dtype=np.int32) * npmts
+    sensor_start = np.zeros(nslices * npmts + 1, dtype=np.int32)
     fwd_nums = np.zeros(nprobs, dtype=np.float64)
 
-    for i in range(slices_start.shape[0]-1):
+    acum = 0
+    for i in range(nslices):
         print(i, slices_start[i], slices_start[i+1])
         start = slices_start[i]
         end   = slices_start[i+1]
-        fwd_nums[start:end] = energies[i] * probs[start:end]
 
-        sensor_ids[start:end] = i
+        ids = np.tile(i*npmts + np.arange(npmts), end-start)
+        sensor_ids[start*npmts:end*npmts] = ids
+
+        sstart = np.arange(npmts) * voxels_in_slice[i] + acum
+        acum = sstart[-1] + voxels_in_slice[i]
+        sensor_start[i*npmts:(i+1)*npmts] = sstart
+
+    sensor_start[-1] = sensor_start[-2] + voxels_in_slice[i]
+    fwd_nums = energies[sensor_ids] * probs
 
     probs_serial_h = ResetProbs(nprobs=np.int32(nprobs),
                                  probs=probs,
@@ -229,31 +241,7 @@ def build_pmt_probs_serial(probs_serial, energies, slices_start):
     return probs_serial_h
 
 
-def build_pmt_sns_probs_serial(probs_h, nvoxels):
-    probs = probs_h.probs
-
-    voxel_ids = np.zeros(nvoxels)
-    for i in np.arange(nvoxels):
-        start = probs_h.voxel_start[i  ]
-        end   = probs_h.voxel_start[i+1]
-        if end > start:
-            voxel_ids[i] = True
-    voxel_ids = np.where(voxel_ids)[0].astype(np.int32)
-
-    nsensors = probs_h.sensor_start.shape[0] - 1
-    sensor_start = probs_h.sensor_start
-    sensor_start_ids = np.arange(nsensors, dtype=np.int32)
-
-    sns_probs_h = ResetSnsProbs(probs            = probs,
-                                voxel_ids        = voxel_ids,
-                                nsensors         = np.int32(nsensors),
-                                sensor_start     = sensor_start,
-                                sensor_start_ids = sensor_start_ids)
-
-    return sns_probs_h
-
-
-def build_sipm_sns_probs_serial(probs_h):
+def build_sns_probs_serial(probs_h):
     probs     = np.zeros(probs_h.nprobs, dtype=np.float64)
     voxel_ids = np.zeros(probs_h.nprobs, dtype=np.int32)
     sensor_start = probs_h.sensor_start.copy().astype(np.int32)

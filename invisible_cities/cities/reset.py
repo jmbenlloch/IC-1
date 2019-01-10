@@ -47,7 +47,7 @@ class Reset(ResetCity):
             t0 = time()
             reset_data   = rst_utils.prepare_data(s1, s2, self.conf.rebin_factor, self.DataSiPM,
                                               self.conf.nsipms, self.conf.sipm_thr,
-                                              self.conf.dist, ZCorr)
+                                              self.conf.dist, ZCorr, self.conf.ipmts)
             t1 = time()
             print("prepare_data: {}".format(t1-t0))
 
