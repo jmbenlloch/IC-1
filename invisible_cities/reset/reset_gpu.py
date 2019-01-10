@@ -30,7 +30,7 @@ class RESET:
     def __init__(self, data_sipm, nsipms, npmts, dist, sipm_dist,
                  pmt_dist, xsize, ysize, rmax,
                  sipm_param, sipm_node, pmt_param, pmt_node,
-                 use_sipms, use_pmts, serial_probs):
+                 use_sipms, use_pmts, serial_probs, ipmts):
         self.nsipms    = np.int32(nsipms)
         self.npmts     = np.int32(npmts)
         self.use_sipms = use_sipms
@@ -45,6 +45,7 @@ class RESET:
 #        self.data_pmt  = dbf.DataPMT(run_number)
         self.pitch     = 10. #hardcoded value!
         self.serial    = serial_probs
+        self.ipmts     = ipmts
 
         det_xsize = self.data_sipm.X.ptp()
         det_ysize = self.data_sipm.Y.ptp()
@@ -55,10 +56,12 @@ class RESET:
         self._create_context()
         self._compile()
         self._load_xy_positions()
-        self._load_parametrization(sipm_param, sipm_node, pmt_param, pmt_node)
 
         if self.serial:
-            self._load_parametrization_serial(sipm_param, sipm_node, pmt_param, pmt_node)
+            self._load_parametrization_serial(sipm_param, sipm_node,
+                                              pmt_param, pmt_node, ipmts)
+        else:
+            self._load_parametrization(sipm_param, sipm_node, pmt_param, pmt_node)
 #        self._mem_allocations()
 
     def _create_context(self):
@@ -104,9 +107,17 @@ class RESET:
         self.pmt_param  =  pmt_param._replace(params = pmts_corr_d)
         self.sipm_param = sipm_param._replace(params = sipms_corr_d)
 
-    def _load_parametrization_serial(self, sipm_param, sipm_node, pmt_param, pmt_node):
+    def _load_parametrization_serial(self, sipm_param, sipm_node, pmt_param, pmt_node, ipmts):
         self.sipm_xy_map = dstf.load_xy_corrections(sipm_param, group="ResetMap", node="SiPM")
-        self.pmt_xy_map  = dstf.load_xy_corrections(pmt_param,  group="ResetMap", node="PMT")
+        self.pmt_xy_map = []
+        if not ipmts:
+            pmt_map = dstf.load_xy_corrections(pmt_param,  group="ResetMap", node="PMT")
+            self.pmt_xy_map.append(pmt_map)
+        else:
+            for i in range(12):
+                table ="PMT{}".format(i)
+                pmt_map = dstf.load_xy_corrections(pmt_param,  group="ResetMap", node=table)
+                self.pmt_xy_map.append(pmt_map)
 
     # sizes of gpuarrays need to be updated with .shape in order to
     # do scan only where there is real data
@@ -219,9 +230,9 @@ def compute_probs_serial(data_sipm, voxels, slices_start, anode_response, energi
     sipm_probs_serial, pmt_probs_serial = rst_serial.computeProb(pmt_xy_map, sipm_xy_map, voxDX, voxDY, voxels[0], voxels[1])
 
     sipm_probs_serial_h = rst_serial.build_sipm_probs_serial(selSens, selVox, sipm_probs_serial, anode_response, slices_start)
-    sipm_sns_probs_serial_h = rst_serial.build_sipm_sns_probs_serial(sipm_probs_serial_h)
-    pmt_probs_serial_h = rst_serial.build_pmt_probs_serial(pmt_probs_serial, energies, slices_start)
-    pmt_sns_probs_serial_h = rst_serial.build_pmt_sns_probs_serial(pmt_probs_serial_h, nvoxels)
+    pmt_probs_serial_h  = rst_serial.build_pmt_probs_serial(pmt_probs_serial, energies, slices_start)
+    sipm_sns_probs_serial_h = rst_serial.build_sns_probs_serial(sipm_probs_serial_h)
+    pmt_sns_probs_serial_h  = rst_serial.build_sns_probs_serial(pmt_probs_serial_h)
 
     return sipm_probs_serial_h, sipm_sns_probs_serial_h, pmt_probs_serial_h, pmt_sns_probs_serial_h
 
@@ -280,7 +291,6 @@ def create_anode_response(cudaf, slices_data_d):
 
     return anode_response_d
 
-# TODO: Generalize for npmts > 1
 def create_cath_response(energies):
     cath_response_d = cuda.to_device(energies)
     return cath_response_d

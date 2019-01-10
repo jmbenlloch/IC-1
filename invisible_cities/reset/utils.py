@@ -13,6 +13,7 @@ import os
 import numpy as np
 import tables as tb
 import pandas as pd
+import pdb
 
 def refresh_selector(param_val):
     selector = s1s2filt.S12Selector(s1_nmin = param_val['s1_num'],
@@ -75,7 +76,7 @@ def rebin_s2si(s2, s2si, rf):
     return s2d_rebin, s2sid_rebin
 
 def prepare_data(s1, s2, slice_width, data_sipm,
-                 nsipms, sipm_thr, dist, zcorrection, stop_slice=1e6):
+                 nsipms, sipm_thr, dist, zcorrection, ipmts, stop_slice=1e6):
     #Rebin data
     s2_rebin = pmapsf.rebin_peak(s2, slice_width)
 
@@ -95,8 +96,10 @@ def prepare_data(s1, s2, slice_width, data_sipm,
     avg_charges = np.empty((max_slices), dtype='f8')
 
     zs           = np.empty((max_slices), dtype='f8')
-    energies     = np.empty((max_slices), dtype='f8')
     slices_start = np.zeros((max_slices+1), dtype='i4')
+
+    npmts        = 12 if ipmts else 1
+    energies     = np.empty((max_slices * npmts), dtype='f8')
 
     # Fill the arrays
     nsensors = 0
@@ -117,7 +120,11 @@ def prepare_data(s1, s2, slice_width, data_sipm,
         #selC    = charge > min_charge
         selC    = (charge > sipm_thr)
         charge  = charge[selC]
-        s2e     = s2_rebin.pmts.sum_over_sensors[tbin] * correction
+        if ipmts:
+            s2e = s2_rebin.pmts.time_slice(tbin)
+        else:
+            s2e = s2_rebin.pmts.sum_over_sensors[tbin] * correction
+
         ids     = s2_rebin.sipms.ids[selC]
         sensors = selC.sum()
 
@@ -133,8 +140,8 @@ def prepare_data(s1, s2, slice_width, data_sipm,
             avg_charges[nslices] = avg_charge
 
             slices_start[nslices+1] = slices_start[nslices] + sensors
-            energies    [nslices]   = s2e
             zs          [nslices]   = z
+            energies    [nslices*npmts:(nslices+1)*npmts] = s2e
 
             nslices  = nslices  + 1
             nsensors = nsensors + sensors
@@ -151,7 +158,7 @@ def prepare_data(s1, s2, slice_width, data_sipm,
                          sensor_ids  [:nsensors],
                          charges     [:nsensors])
 
-    data = ResetData(voxels, slices, energies[:nslices], zs[:nslices])
+    data = ResetData(voxels, slices, energies[:nslices*npmts], zs[:nslices])
     return data
 
 
