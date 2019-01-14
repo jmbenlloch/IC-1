@@ -19,6 +19,7 @@ def combine_maps(files, pmt_bins, sipm_bins, norm=False):
     ipmts = False
     pmts_xs = []
     pmts_ys = []
+    pmts_zs = []
     first_file = True
 
     for f in files:
@@ -28,6 +29,10 @@ def combine_maps(files, pmt_bins, sipm_bins, norm=False):
                 if first_file:
                     pmts_xs.append(h5in.root.ResetMap.pmt_counts.cols.x[:])
                     pmts_ys.append(h5in.root.ResetMap.pmt_counts.cols.y[:])
+                    try:
+                        pmts_zs.append(h5in.root.ResetMap.pmt_counts.cols.z[:])
+                    except:
+                        pass
                 pmts_counts = pmts_counts + h5in.root.ResetMap.pmt_counts.cols.value[:]
                 pmts_values = pmts_values + h5in.root.ResetMap.pmt_values.cols.value[:]
             else:
@@ -66,7 +71,7 @@ def combine_maps(files, pmt_bins, sipm_bins, norm=False):
         sipm_factors = sipm_factors.max() / sipm_factors
         sipm_factors[np.isinf(sipm_factors)] = 0
 
-    return pmts_xs, pmts_ys, pmt_factors, sipms_xs, sipms_ys, sipm_factors
+    return pmts_xs, pmts_ys, pmts_zs, pmt_factors, sipms_xs, sipms_ys, sipm_factors
 
 def get_nbins(files):
     pmt_bins, sipm_bins = 0, 0
@@ -92,6 +97,13 @@ class ResetMapTable(tb.IsDescription):
     factor      = tb.Float32Col(pos=2)
     uncertainty = tb.Float32Col(pos=3)
 
+class Reset3dMapTable(tb.IsDescription):
+    x           = tb.Float32Col(pos=0)
+    y           = tb.Float32Col(pos=1)
+    z           = tb.Float32Col(pos=2)
+    factor      = tb.Float32Col(pos=3)
+    uncertainty = tb.Float32Col(pos=4)
+
 
 def map_writer(hdf5_file, table_name, *, compression='ZLIB4'):
     map_table  = make_table(hdf5_file,
@@ -113,11 +125,33 @@ def map_writer(hdf5_file, table_name, *, compression='ZLIB4'):
     return write_map
 
 
+def map3d_writer(hdf5_file, table_name, *, compression='ZLIB4'):
+    map_table  = make_table(hdf5_file,
+                            group       = 'ResetMap',
+                            name        = table_name,
+                            fformat     = Reset3dMapTable,
+                            description = 'Probability map',
+                            compression = compression)
+
+    def write_map(probs, xs, ys, zs):
+        for p, x, y, z in zip(probs, xs, ys, zs):
+            row = map_table.row
+            row["x"          ] = x
+            row["y"          ] = y
+            row["z"          ] = z
+            row["factor"     ] = p
+            row["uncertainty"] = 0
+            row.append()
+
+    return write_map
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-maps", required=True)
     parser.add_argument("-o", required=True)
     parser.add_argument("-norm", action="store_true")
+    parser.add_argument("-full3d", action="store_true")
 
     args = parser.parse_args(sys.argv[1:])
     maps_path = args.maps
@@ -129,7 +163,7 @@ if __name__ == '__main__':
 
     pmt_bins, sipm_bins = get_nbins(files)
 
-    pmts_xs, pmts_ys, pmt_values, sipms_xs, sipms_ys, sipm_values = combine_maps(files, pmt_bins, sipm_bins, norm)
+    pmts_xs, pmts_ys, pmts_zs, pmt_values, sipms_xs, sipms_ys, sipm_values = combine_maps(files, pmt_bins, sipm_bins, norm)
 
     if len(pmts_xs) == 1: # individual pmts
         pmt_plot  = map_file + '_pmts.png'
@@ -151,5 +185,9 @@ if __name__ == '__main__':
                 writer_pmt = map_writer(h5out, 'PMT{}'.format(i))
                 writer_pmt (pmt_values[:,i] , pmts_xs[i] , pmts_ys[i])
         else:
-            writer_pmt  = map_writer(h5out, 'PMT')
-            writer_pmt (pmt_values , pmts_xs[0] , pmts_ys[0])
+            if not args.full3d:
+                writer_pmt  = map_writer(h5out, 'PMT')
+                writer_pmt (pmt_values , pmts_xs[0] , pmts_ys[0])
+            else:
+                writer_pmt  = map3d_writer(h5out, 'PMT')
+                writer_pmt (pmt_values , pmts_xs[0] , pmts_ys[0], pmts_zs[0])
