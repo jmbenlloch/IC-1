@@ -22,7 +22,8 @@ def combine_maps(files, pmt_bins, sipm_bins, norm=False):
     pmts_zs = []
     first_file = True
 
-    for f in files:
+    for i, f in enumerate(files):
+        print(i, f)
         with tb.open_file(f) as h5in:
             if 'pmt_counts' in h5in.root.ResetMap:
                 print("Pmt sum")
