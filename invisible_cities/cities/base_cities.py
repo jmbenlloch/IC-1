@@ -797,7 +797,7 @@ class ResetCity(PCity):
                        sipm_thr x_size y_size rmax rebin_factor
                        sipm_param sipm_node pmt_param pmt_node
                        lifetime_corr lifetime_value lifetime_error
-                       use_sipms use_pmts serial_probs ipmts""".split())
+                       use_sipms use_pmts serial_probs ipmts full3d""".split())
 
     def __init__(self, **kwds):
         super().__init__(**kwds)
@@ -809,7 +809,7 @@ class ResetCity(PCity):
                          self.conf.sipm_param, self.conf.sipm_node,
                          self.conf.pmt_param, self.conf.pmt_node,
                          self.conf.use_sipms, self.conf.use_pmts,
-                         self.conf.serial_probs, self.conf.ipmts)
+                         self.conf.serial_probs, self.conf.ipmts, self.conf.full3d)
 
 
 class KrCity(PCity):
