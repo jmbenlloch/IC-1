@@ -159,7 +159,7 @@ def build_coords(xs, ys, zs):
     ybins = len(ys)
     zbins = len(zs)
 
-    xs = np.repeat(xs, xbins*ybins)
+    xs = np.repeat(xs, ybins*zbins)
     ys = np.tile(np.repeat(ys, zbins), xbins)
     zs = np.tile(zs, xbins*ybins)
 
