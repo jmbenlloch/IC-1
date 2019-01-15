@@ -30,7 +30,7 @@ class RESET:
     def __init__(self, data_sipm, nsipms, npmts, dist, sipm_dist,
                  pmt_dist, xsize, ysize, rmax,
                  sipm_param, sipm_node, pmt_param, pmt_node,
-                 use_sipms, use_pmts, serial_probs, ipmts):
+                 use_sipms, use_pmts, serial_probs, ipmts, full3d):
         self.nsipms    = np.int32(nsipms)
         self.npmts     = np.int32(npmts)
         self.use_sipms = use_sipms
@@ -46,6 +46,7 @@ class RESET:
         self.pitch     = 10. #hardcoded value!
         self.serial    = serial_probs
         self.ipmts     = ipmts
+        self.full3d    = full3d
 
         det_xsize = self.data_sipm.X.ptp()
         det_ysize = self.data_sipm.Y.ptp()
@@ -58,8 +59,12 @@ class RESET:
         self._load_xy_positions()
 
         if self.serial:
-            self._load_parametrization_serial(sipm_param, sipm_node,
-                                              pmt_param, pmt_node, ipmts)
+            if not self.full3d:
+                self._load_parametrization_serial(sipm_param, sipm_node,
+                                                  pmt_param, pmt_node, ipmts)
+            else:
+                self._load_parametrization_3d_serial(sipm_param, sipm_node,
+                                                    pmt_param, pmt_node)
         else:
             self._load_parametrization(sipm_param, sipm_node, pmt_param, pmt_node)
 #        self._mem_allocations()
@@ -119,12 +124,16 @@ class RESET:
                 pmt_map = dstf.load_xy_corrections(pmt_param,  group="ResetMap", node=table)
                 self.pmt_xy_map.append(pmt_map)
 
+    def _load_parametrization_3d_serial(self, sipm_param, sipm_node, pmt_param, pmt_node):
+        self.sipm_xy_map = rst_serial.read_3dmap(sipm_param, group="ResetMap", node="SiPM")
+        self.pmt_xy_map  = rst_serial.read_3dmap(pmt_param , group="ResetMap", node="PMT")
+
     # sizes of gpuarrays need to be updated with .shape in order to
     # do scan only where there is real data
     def _mem_allocations(self):
         pass
 
-    def run(self, voxels, slices, energies, slices_start, iterations):
+    def run(self, voxels, slices, energies, slices_start, iterations, zs):
         voxels_data_d = rst_mem.copy_voxels_data_h2d(voxels)
         slices_data_d = rst_mem.copy_slice_data_h2d(slices)
 
@@ -147,6 +156,7 @@ class RESET:
             #get voxels and put them in the proper format for serial funtions
             rst_voxels_h = rst_mem.copy_voxels_d2h(rst_voxels)
             voxels_serial = np.array(([v[0] for v in rst_voxels_h.voxels], [v[1] for v in rst_voxels_h.voxels]))
+            voxels_zs = zs[slice_ids_h]
 
             # get anode response
             nsensors_anode = slices_data_d.nsensors * slices_data_d.nslices
@@ -156,7 +166,7 @@ class RESET:
             anode_serial[:,0] = np.arange(0, nsensors_anode) % 1792 # use DB sensor ids
             anode_serial[:,1] = anode_h
 
-            sipm_probs_h, sipm_sns_probs_h, pmt_probs_h, pmt_sns_probs_h = compute_probs_serial(self.data_sipm, voxels_serial, rst_voxels_h.slice_start, anode_serial, energies, self.sipm_dist, rst_voxels.nvoxels, self.pmt_xy_map, self.sipm_xy_map)
+            sipm_probs_h, sipm_sns_probs_h, pmt_probs_h, pmt_sns_probs_h = compute_probs_serial(self.data_sipm, voxels_serial, rst_voxels_h.slice_start, anode_serial, energies, self.sipm_dist, rst_voxels.nvoxels, self.pmt_xy_map, self.sipm_xy_map, self.full3d, voxels_zs)
             sipm_probs     = rst_mem.copy_probs_h2d       (sipm_probs_h)
             pmt_probs      = rst_mem.copy_probs_h2d       (pmt_probs_h)
             sipm_sns_probs = rst_mem.copy_sensor_probs_h2d(sipm_sns_probs_h)
@@ -224,10 +234,16 @@ class RESET:
         return sipm_probs, sipm_sns_probs, pmt_probs, pmt_sns_probs
 
 
-def compute_probs_serial(data_sipm, voxels, slices_start, anode_response, energies, sipm_dist, nvoxels, pmt_xy_map, sipm_xy_map):
+def compute_probs_serial(data_sipm, voxels, slices_start, anode_response, energies, sipm_dist, nvoxels,
+                         pmt_xy_map, sipm_xy_map, full3d, voxels_zs):
     voxDX, voxDY = rst_serial.computeDiff(data_sipm, voxels, anode_response[:1792])
     selVox, selSens = rst_serial.createSel(voxDX, voxDY, anode_response[:1792], sipm_dist)
-    sipm_probs_serial, pmt_probs_serial = rst_serial.computeProb(pmt_xy_map, sipm_xy_map, voxDX, voxDY, voxels[0], voxels[1])
+    if full3d:
+        sipm_probs_serial, pmt_probs_serial = rst_serial.computeProb3d(pmt_xy_map, sipm_xy_map, voxDX, voxDY,
+                                                                       voxels[0], voxels[1], voxels_zs)
+    else:
+        sipm_probs_serial, pmt_probs_serial = rst_serial.computeProb(pmt_xy_map, sipm_xy_map, voxDX, voxDY,
+                                                                       voxels[0], voxels[1])
 
     sipm_probs_serial_h = rst_serial.build_sipm_probs_serial(selSens, selVox, sipm_probs_serial, anode_response, slices_start)
     pmt_probs_serial_h  = rst_serial.build_pmt_probs_serial(pmt_probs_serial, energies, slices_start)

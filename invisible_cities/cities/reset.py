@@ -62,7 +62,7 @@ class Reset(ResetCity):
             t0 = time()
             voxels, slices = self.rst.run(reset_data.voxels_data, reset_data.slices,
                                      reset_data.energies, slices_start,
-                                     self.conf.iterations)
+                                     self.conf.iterations, reset_data.zs)
             t1 = time()
             print("run_reset: {}".format(t1-t0))
 

@@ -65,6 +65,19 @@ def computeProb(pmt_xy_map, sipm_xy_map, voxDX, voxDY, voxX, voxY):
     return np.array(xyprob), np.array(pmtprob)
 
 
+def computeProb3d(pmt_xy_map, sipm_xy_map, voxDX, voxDY, voxX, voxY, voxZ):
+    xyprob = [sipm_xy_map(voxDX[j], voxDY[j], np.repeat(voxZ[j], 1792)) for j in range(len(voxDX))]
+    pmtprob = [pmt_xy_map(voxX, voxY, voxZ)]
+
+    pmtprob = np.array(pmtprob)
+    shape   = pmtprob.shape
+    pmtprob = pmtprob.reshape(*shape[::-1])
+
+    xyprob = np.array(xyprob)
+
+    return xyprob, pmtprob
+
+
 def ComputeCathForward(vox, cath_response, pmt_prob):
     cathForward = []
     for sensor in range(len(cath_response)):
@@ -275,3 +288,45 @@ def build_sns_probs_serial(probs_h):
                                 sensor_start_ids = sensor_start_ids)
     return sns_probs_h
 
+
+def get_coord_limits(xs):
+    xs_unique = np.unique(xs)
+    xmin  = xs_unique.min()
+    xmax  = xs_unique.max()
+    xstep = xs_unique[1] - xs_unique[0]
+    nbins = (xmax - xmin) / xstep + 1
+    return xmin, xmax, xstep, nbins
+
+
+def read_3dmap(corr_file, group, node):
+    with tb.open_file(corr_file) as h5in:
+        table = getattr(h5in.root, "{}/{}".format(group, node))
+        data = table[:]
+
+    xmin, xmax, xstep, xbins = get_coord_limits(data['x'])
+    ymin, ymax, ystep, ybins = get_coord_limits(data['y'])
+    zmin, zmax, zstep, zbins = get_coord_limits(data['z'])
+
+    print(xmin, xmax, xstep, xbins)
+    print(ymin, ymax, ystep, ybins)
+    print(zmin, zmax, zstep, zbins)
+
+    def get_correction(x, y, z):
+        x = np.round((x - xmin) / xstep)
+        y = np.round((y - ymin) / ystep)
+        z = np.round((z - zmin) / zstep)
+
+        x[x < xmin] = xmin
+        y[y < ymin] = ymin
+        z[z < zmin] = zmin
+        x[x > xmax] = xmax
+        y[y > ymax] = ymax
+        z[z > zmax] = zmax
+
+        #pos = int(x * ybins * zbins + y * zbins + z)
+        pos = (x * ybins * zbins + y * zbins + z).astype(np.int32)
+
+        result = data['factor'][pos]
+        return result
+
+    return get_correction
