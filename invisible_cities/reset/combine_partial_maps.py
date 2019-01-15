@@ -50,6 +50,11 @@ def combine_maps(files, pmt_bins, sipm_bins, norm=False):
 
             sipms_xs     = h5in.root.ResetMap.sipm_counts.cols.x[:]
             sipms_ys     = h5in.root.ResetMap.sipm_counts.cols.y[:]
+            sipms_zs     = []
+            try:
+                sipms_zs = h5in.root.ResetMap.sipm_counts.cols.z[:]
+            except:
+                pass
             sipms_counts = sipms_counts + h5in.root.ResetMap.sipm_counts.cols.value[:]
             sipms_values = sipms_values + h5in.root.ResetMap.sipm_values.cols.value[:]
 
@@ -72,7 +77,7 @@ def combine_maps(files, pmt_bins, sipm_bins, norm=False):
         sipm_factors = sipm_factors.max() / sipm_factors
         sipm_factors[np.isinf(sipm_factors)] = 0
 
-    return pmts_xs, pmts_ys, pmts_zs, pmt_factors, sipms_xs, sipms_ys, sipm_factors
+    return pmts_xs, pmts_ys, pmts_zs, pmt_factors, sipms_xs, sipms_ys, sipms_zs, sipm_factors
 
 def get_nbins(files):
     pmt_bins, sipm_bins = 0, 0
@@ -164,7 +169,7 @@ if __name__ == '__main__':
 
     pmt_bins, sipm_bins = get_nbins(files)
 
-    pmts_xs, pmts_ys, pmts_zs, pmt_values, sipms_xs, sipms_ys, sipm_values = combine_maps(files, pmt_bins, sipm_bins, norm)
+    pmts_xs, pmts_ys, pmts_zs, pmt_values, sipms_xs, sipms_ys, sipms_zs, sipm_values = combine_maps(files, pmt_bins, sipm_bins, norm)
 
     if len(pmts_xs) == 1: # individual pmts
         pmt_plot  = map_file + '_pmts.png'
@@ -178,8 +183,12 @@ if __name__ == '__main__':
     make_plot(sipms_xs, sipms_ys, sipm_values, sipm_plot)
 
     with tb.open_file(map_file, 'w') as h5out:
-        writer_sipm = map_writer(h5out, 'SiPM')
-        writer_sipm(sipm_values, sipms_xs, sipms_ys)
+        if not args.full3d:
+            writer_sipm = map_writer(h5out, 'SiPM')
+            writer_sipm(sipm_values, sipms_xs, sipms_ys)
+        else:
+            writer_sipm  = map3d_writer(h5out, 'SiPM')
+            writer_sipm(sipm_values , sipms_xs, sipms_ys, sipms_zs)
 
         if pmt_values.shape[-1] == 12: #ipmts
             for i in range(pmt_values.shape[-1]):
