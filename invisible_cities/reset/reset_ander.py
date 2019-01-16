@@ -58,11 +58,15 @@ def createSel(voxDX, voxDY, anode_response, sipm_dist):
 
 
 def computeProb(pmt_xy_map, sipm_xy_map, voxDX, voxDY, voxX, voxY):
-    xyprob = [sipm_xy_map(voxDX[j], voxDY[j]).value for j in range(len(voxDX))]
-    pmtprob = []
-    for j in range(len(voxDX)):
-        pmtprob.append([pmt_xy_map[i](voxX[j], voxY[j]).value for i in range(len(pmt_xy_map))])
-    return np.array(xyprob), np.array(pmtprob)
+    xyprob = [sipm_xy_map(voxDX[j], voxDY[j]) for j in range(len(voxDX))]
+    pmtprob = [pmt_xy_map[i](voxX, voxY) for i in range(len(pmt_xy_map))]
+
+    xyprob = np.array(xyprob)
+    pmtprob = np.array(pmtprob)
+    shape   = pmtprob.shape
+    pmtprob = pmtprob.reshape(*shape[::-1])
+
+    return xyprob, pmtprob
 
 
 def computeProb3d(pmt_xy_map, sipm_xy_map, voxDX, voxDY, voxX, voxY, voxZ):
@@ -316,15 +320,43 @@ def read_3dmap(corr_file, group, node):
         y = np.round((y - ymin) / ystep)
         z = np.round((z - zmin) / zstep)
 
-        x[x < xmin] = xmin
-        y[y < ymin] = ymin
-        z[z < zmin] = zmin
-        x[x > xmax] = xmax
-        y[y > ymax] = ymax
-        z[z > zmax] = zmax
+        x[x < xmin] = 0
+        y[y < ymin] = 0
+        z[z < zmin] = 0
+        x[x >= xbins] = xbins - 1
+        y[y >= ybins] = ybins - 1
+        z[z >= zbins] = zbins - 1
 
         #pos = int(x * ybins * zbins + y * zbins + z)
         pos = (x * ybins * zbins + y * zbins + z).astype(np.int32)
+
+        result = data['factor'][pos]
+        return result
+
+    return get_correction
+
+
+def read_map(corr_file, group, node):
+    with tb.open_file(corr_file) as h5in:
+        table = getattr(h5in.root, "{}/{}".format(group, node))
+        data = table[:]
+
+    xmin, xmax, xstep, xbins = get_coord_limits(data['x'])
+    ymin, ymax, ystep, ybins = get_coord_limits(data['y'])
+
+    print(xmin, xmax, xstep, xbins)
+    print(ymin, ymax, ystep, ybins)
+
+    def get_correction(x, y):
+        x = np.round((x - xmin) / xstep)
+        y = np.round((y - ymin) / ystep)
+
+        x[x < xmin] = 0
+        y[y < ymin] = 0
+        x[x >= xbins] = xbins - 1
+        y[y >= ybins] = ybins - 1
+
+        pos = (x * ybins + y).astype(np.int32)
 
         result = data['factor'][pos]
         return result

@@ -113,16 +113,19 @@ class RESET:
         self.sipm_param = sipm_param._replace(params = sipms_corr_d)
 
     def _load_parametrization_serial(self, sipm_param, sipm_node, pmt_param, pmt_node, ipmts):
-        self.sipm_xy_map = dstf.load_xy_corrections(sipm_param, group="ResetMap", node="SiPM")
+#        self.sipm_xy_map = dstf.load_xy_corrections(sipm_param, group="ResetMap", node="SiPM")
+        self.sipm_xy_map = rst_serial.read_map(sipm_param, group="ResetMap", node="SiPM")
         self.pmt_xy_map = []
         if not ipmts:
-            pmt_map = dstf.load_xy_corrections(pmt_param,  group="ResetMap", node="PMT")
+            pmt_map = rst_serial.read_map(pmt_param,  group="ResetMap", node="PMT")
+            #pmt_map = dstf.load_xy_corrections(pmt_param,  group="ResetMap", node="PMT")
             self.pmt_xy_map.append(pmt_map)
         else:
             for i in range(12):
                 table ="PMT{}".format(i)
                 pmt_map = dstf.load_xy_corrections(pmt_param,  group="ResetMap", node=table)
                 self.pmt_xy_map.append(pmt_map)
+
 
     def _load_parametrization_3d_serial(self, sipm_param, sipm_node, pmt_param, pmt_node):
         self.sipm_xy_map = rst_serial.read_3dmap(sipm_param, group="ResetMap", node="SiPM")
@@ -157,6 +160,8 @@ class RESET:
             rst_voxels_h = rst_mem.copy_voxels_d2h(rst_voxels)
             voxels_serial = np.array(([v[0] for v in rst_voxels_h.voxels], [v[1] for v in rst_voxels_h.voxels]))
             voxels_zs = zs[slice_ids_h]
+
+            pdb.set_trace()
 
             # get anode response
             nsensors_anode = slices_data_d.nsensors * slices_data_d.nslices
