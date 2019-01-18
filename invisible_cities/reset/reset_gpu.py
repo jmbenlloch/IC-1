@@ -121,9 +121,10 @@ class RESET:
             #pmt_map = dstf.load_xy_corrections(pmt_param,  group="ResetMap", node="PMT")
             self.pmt_xy_map.append(pmt_map)
         else:
-            for i in range(12):
+            for i in range(11):
                 table ="PMT{}".format(i)
-                pmt_map = dstf.load_xy_corrections(pmt_param,  group="ResetMap", node=table)
+                #pmt_map = dstf.load_xy_corrections(pmt_param,  group="ResetMap", node=table)
+                pmt_map = rst_serial.read_map(pmt_param,  group="ResetMap", node=table)
                 self.pmt_xy_map.append(pmt_map)
 
 
@@ -160,8 +161,6 @@ class RESET:
             rst_voxels_h = rst_mem.copy_voxels_d2h(rst_voxels)
             voxels_serial = np.array(([v[0] for v in rst_voxels_h.voxels], [v[1] for v in rst_voxels_h.voxels]))
             voxels_zs = zs[slice_ids_h]
-
-            pdb.set_trace()
 
             # get anode response
             nsensors_anode = slices_data_d.nsensors * slices_data_d.nslices

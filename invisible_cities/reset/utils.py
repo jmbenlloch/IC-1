@@ -98,7 +98,7 @@ def prepare_data(s1, s2, slice_width, data_sipm,
     zs           = np.empty((max_slices), dtype='f8')
     slices_start = np.zeros((max_slices+1), dtype='i4')
 
-    npmts        = 12 if ipmts else 1
+    npmts        = 11 if ipmts else 1
     energies     = np.empty((max_slices * npmts), dtype='f8')
 
     # Fill the arrays

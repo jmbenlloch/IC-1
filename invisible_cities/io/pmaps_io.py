@@ -105,11 +105,11 @@ def load_pmaps(filename):
     if s2pmtdf is None: s2pmtdf = _build_ipmtdf_from_sumdf(s2df)
 
     event_numbers = set.union(set(s1df.event), set(s2df.event))
-    count = 0
+#    count = 0
     for event_number in event_numbers:
-        if count > 200:
-            break
-        count = count + 1
+#        if count > 1000:
+#            break
+#        count = count + 1
 
         s1s = s1s_from_df(s1df   [s1df   .event == event_number],
                           s1pmtdf[s1pmtdf.event == event_number])
