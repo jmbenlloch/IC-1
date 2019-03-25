@@ -18,7 +18,6 @@ without simulating the electronics. This includes:
 import numpy  as np
 import tables as tb
 
-from .. types.ic_types import minmax
 from .. database       import load_db
 
 from .. reco                  import tbl_functions        as tbl
@@ -40,11 +39,10 @@ from .  components import print_every
 from .  components import zero_suppress_wfs
 from .  components import WfType
 from .  components import wf_from_files
-
-from .  irene      import check_empty_pmap
-from .  irene      import check_nonempty_indices
-from .  irene      import get_number_of_active_pmts
-from .  irene      import build_pmap
+from .  components import check_empty_pmap
+from .  components import check_nonempty_indices
+from .  components import get_number_of_active_pmts
+from .  components import build_pmap
 
 @city
 def hypathia(files_in, file_out, compression, event_range, print_mod, detector_db, run_number,
