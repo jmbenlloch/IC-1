@@ -617,9 +617,7 @@ def compute_and_write_pmaps(detector_db, run_number,
                empty_pmaps.filter,
                fl.branch(write_pmap))
 
-    # remove sipm_rwf_to_cal if it is not set
-    fn_list = list(fn for fn in fn_list if fn)
-
-    compute_pmaps = pipe(*fn_list)
+    # Filter out simp_rwf_to_cal if it is not set
+    compute_pmaps = pipe(*filter(None, fn_list))
 
     return compute_pmaps, empty_indices, empty_pmaps
