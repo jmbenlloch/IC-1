@@ -20,7 +20,12 @@ def test_hypathia_exact_result(ICDATADIR, output_tmpdir):
                      file_out     = file_out,
                      event_range  = (0, 2)))
 
+    # Set a specific seed because we want the result to be
+    # repeatible. Go back to original state after running.
+    original_random_state = np.random.get_state()
+    np.random.seed(123456789)
     hypathia(**conf)
+    np.random.set_state(original_random_state)
 
     tables = (     "MC/extents"    ,      "MC/hits"      ,    "MC/particles", "MC/generators",
                 "PMAPS/S1"         ,   "PMAPS/S2"        , "PMAPS/S2Si"     ,
@@ -31,6 +36,7 @@ def test_hypathia_exact_result(ICDATADIR, output_tmpdir):
     with tb.open_file(true_output)  as true_output_file:
         with tb.open_file(file_out) as      output_file:
             for table in tables:
+                print(table)
                 got      = getattr(     output_file.root, table)
                 expected = getattr(true_output_file.root, table)
                 assert_tables_equality(got, expected)
