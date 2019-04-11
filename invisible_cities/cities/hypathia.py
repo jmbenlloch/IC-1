@@ -18,8 +18,11 @@ without simulating the electronics. This includes:
 import numpy  as np
 import tables as tb
 
+from functools import partial
+
 from .. database       import load_db
 
+from .. reco                  import sensor_functions     as sf
 from .. reco                  import tbl_functions        as tbl
 from .. reco                  import peak_functions       as pkf
 from .. core. random_sampling import NoiseSampler         as SiPMsNoiseSampler
@@ -38,16 +41,20 @@ from .  components import city
 from .  components import print_every
 from .  components import zero_suppress_wfs
 from .  components import WfType
+from .  components import sensor_data
 from .  components import wf_from_files
 from .  components import check_empty_pmap
 from .  components import check_nonempty_indices
 from .  components import get_number_of_active_pmts
 from .  components import build_pmap
 from .  components import compute_and_write_pmaps
+from .  components import simulate_sipm_response
+from .  components import calibrate_sipms
+
 
 @city
 def hypathia(files_in, file_out, compression, event_range, print_mod, detector_db, run_number,
-          n_baseline, n_mau, thr_mau, thr_sipm, thr_sipm_type, pmt_wfs_rebin,
+          sipm_noise_cut, filter_padding, thr_sipm, thr_sipm_type, pmt_wfs_rebin, pmt_pe_rms,
           s1_lmin, s1_lmax, s1_tmin, s1_tmax, s1_rebin_stride, s1_stride, thr_csum_s1,
           s2_lmin, s2_lmax, s2_tmin, s2_tmax, s2_rebin_stride, s2_stride, thr_csum_s2, thr_sipm_s2):
     if   thr_sipm_type.lower() == "common":
@@ -64,11 +71,17 @@ def hypathia(files_in, file_out, compression, event_range, print_mod, detector_d
                           "Only valid options are 'common' and 'individual'")
 
     #### Define data transformations
+    sd = sensor_data(files_in[0], WfType.mcrd)
 
     # Raw WaveForm to Corrected WaveForm
     mcrd_to_rwf      = fl.map(rebin_pmts(pmt_wfs_rebin),
                               args = "pmt",
-                              out  = "ccwfs")
+                              out  = "rwf")
+
+    # Add single pe fluctuation to pmts
+    simulate_pmt = fl.map(partial(sf.charge_fluctuation, single_pe_rms=pmt_pe_rms),
+                          args = "rwf",
+                          out = "ccwfs")
 
     # Compute pmt sum
     pmt_sum          = fl.map(pmts_sum, args = 'ccwfs',
@@ -78,6 +91,20 @@ def hypathia(files_in, file_out, compression, event_range, print_mod, detector_d
     zero_suppress    = fl.map(zero_suppress_wfs(thr_csum_s1, thr_csum_s2),
                               args = ("pmt", "pmt"),
                               out  = ("s1_indices", "s2_indices", "s2_energies"))
+
+    # SiPMs simulation
+    simulate_sipm_response_  = fl.map(simulate_sipm_response(detector_db, run_number,
+                                                             sd.SIPMWL, sipm_noise_cut,
+                                                             filter_padding),
+                                     args="sipm", out="sipm_sim")
+
+    # Sipm calibration function expects waveform as int16
+    discretize_signal = fl.map(lambda rwf: rwf.astype(np.int16),
+                              args="sipm_sim", out="sipm")
+
+    # SiPMs calibration
+    sipm_rwf_to_cal  = fl.map(calibrate_sipms(detector_db, run_number, sipm_thr),
+                              item = "sipm")
 
     event_count_in  = fl.spy_count()
     event_count_out = fl.spy_count()
@@ -98,7 +125,7 @@ def hypathia(files_in, file_out, compression, event_range, print_mod, detector_d
                                              detector_db, run_number,
                                              s1_lmax, s1_lmin, s1_rebin_stride, s1_stride, s1_tmax, s1_tmin,
                                              s2_lmax, s2_lmin, s2_rebin_stride, s2_stride, s2_tmax, s2_tmin, thr_sipm_s2,
-                                             h5out, compression)
+                                             h5out, compression, sipm_rwf_to_cal)
 
         return push(source = wf_from_files(files_in, WfType.mcrd),
                     pipe   = pipe(
@@ -106,6 +133,7 @@ def hypathia(files_in, file_out, compression, event_range, print_mod, detector_d
                                 print_every(print_mod),
                                 event_count_in.spy,
                                 mcrd_to_rwf,
+                                simulate_pmt,
                                 pmt_sum,
                                 zero_suppress,
                                 compute_pmaps,
@@ -125,7 +153,7 @@ def rebin_pmts(rebin_stride):
         times     = np.zeros(rwf.shape[1])
         widths    = times
         waveforms = rwf
-        _, _, rebinned_wfs = pkf.rebin_times_and_waveforms(times, widths, waveforms, rebin_stride=25)
+        _, _, rebinned_wfs = pkf.rebin_times_and_waveforms(times, widths, waveforms, rebin_stride=rebin_stride)
         return rebinned_wfs
     return rebin_pmts
 
