@@ -151,11 +151,13 @@ def hypathia(files_in, file_out, compression, event_range, print_mod, detector_d
 
 def rebin_pmts(rebin_stride):
     def rebin_pmts(rwf):
-        # dummy data for times and widths
-        times     = np.zeros(rwf.shape[1])
-        widths    = times
-        waveforms = rwf
-        _, _, rebinned_wfs = pkf.rebin_times_and_waveforms(times, widths, waveforms, rebin_stride=rebin_stride)
+        rebinned_wfs = rwf
+        if rebin_stride > 1:
+            # dummy data for times and widths
+            times     = np.zeros(rwf.shape[1])
+            widths    = times
+            waveforms = rwf
+            _, _, rebinned_wfs = pkf.rebin_times_and_waveforms(times, widths, waveforms, rebin_stride=rebin_stride)
         return rebinned_wfs
     return rebin_pmts
 
