@@ -136,6 +136,8 @@ def hypathia(files_in, file_out, compression, event_range, print_mod, detector_d
                                 simulate_pmt,
                                 pmt_sum,
                                 zero_suppress,
+                                simulate_sipm_response_,
+                                discretize_signal,
                                 compute_pmaps,
                                 event_count_out.spy,
                                 fl.fork(write_mc,
