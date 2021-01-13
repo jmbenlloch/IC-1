@@ -32,8 +32,6 @@ def check_minrun_maxrun(table, filters):
     array_mysql  = np.array(data_mysql , dtype=np.float64)
     array_sqlite = np.array(data_sqlite, dtype=np.float64)
 
-    #return data_mysql, data_sqlite
-
     np.testing.assert_allclose(array_mysql, array_sqlite)
 
     try:
