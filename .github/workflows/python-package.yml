@@ -1,0 +1,40 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: Python package
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+        - '**.sqlite3'
+  pull_request:
+    branches: [ master ]
+    paths:
+        - '**.sqlite3'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7]
+
+    steps:
+    - uses: actions/checkout@v2
+    - id: files
+      uses: jitterbit/get-changed-files@v1
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Get LFS files
+      run: |
+        git lfs pull
+    - name: Install dependencies
+      run: |
+        pip install pymysql numpy
+    - name: Check database
+      run: |
+        python invisible_cities/database/check_gain_update.py ${{ steps.files.outputs.all }}
