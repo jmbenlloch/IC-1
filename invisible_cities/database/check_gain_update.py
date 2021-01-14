@@ -42,24 +42,22 @@ def check_minrun_maxrun(table, filters):
     return latest_run
 
 
-if __name__ == '__main__':
-    # Get DB name from the list of updated files in the commit
-    dbfile = next(filter(lambda f: f.endswith('sqlite3'), sys.argv))
-    dbname = dbfile.split('.')[-2]
+# Get DB name from the list of updated files in the commit
+dbfile = next(filter(lambda f: f.endswith('sqlite3'), sys.argv))
+dbname = dbfile.split('.')[-2]
 
-    # Connect to MySQL server and open SQLite copy
-    cursor_sqlite = connect_sqlite(dbname)
-    cursor_mysql  = connect_mysql (dbname)
+# Connect to MySQL server and open SQLite copy
+cursor_sqlite = connect_sqlite(dbname)
+cursor_mysql  = connect_mysql (dbname)
 
-    # Check tables
-    tables = ['ChannelGain', 'ChannelMask', 'SipmNoisePDF']
-    pmts  = 'SensorID < 100'
-    sipms = 'SensorID > 100'
+# Check tables
+tables = ['ChannelGain', 'ChannelMask', 'SipmNoisePDF']
+pmts  = 'SensorID < 100'
+sipms = 'SensorID > 100'
 
-    # Print latest run available in each case
-    for table in tables:
-        latest_run_sipms = check_minrun_maxrun(table, sipms)
-        latest_run_pmts  = check_minrun_maxrun(table, pmts)
-
-        print(f'{table}: latest SiPM run {latest_run_sipms}')
-        print(f'{table}: latest PMT  run {latest_run_pmts}')
+# Print latest run available in each case
+for table in tables:
+    latest_run_sipms = check_minrun_maxrun(table, sipms)
+    latest_run_pmts  = check_minrun_maxrun(table, pmts)
+    print(f'{table}: latest SiPM run {latest_run_sipms}')
+    print(f'{table}: latest PMT  run {latest_run_pmts}')
