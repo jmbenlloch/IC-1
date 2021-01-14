@@ -4,19 +4,8 @@ import pymysql
 pymysql.install_as_MySQLdb()
 import numpy as np
 
-
-def connect_sqlite(dbname):
-    dbfile        = f'invisible_cities/database/localdb.{dbname}.sqlite3'
-    conn_sqlite   = sqlite3.connect(dbfile)
-    cursor_sqlite = conn_sqlite.cursor()
-    return cursor_sqlite
-
-
-def connect_mysql(dbname):
-    conn_mysql  = pymysql.connect(host="neutrinos1.ific.uv.es",
-                                  user='nextreader',passwd='readonly', db=dbname)
-    cursor_mysql  = conn_mysql .cursor()
-    return cursor_mysql
+from invisible_cities.database.db_connection import connect_sqlite
+from invisible_cities.database.db_connection import connect_mysql
 
 
 def check_minrun_maxrun(table, filters):
@@ -47,8 +36,8 @@ dbfile = next(filter(lambda f: f.endswith('sqlite3'), sys.argv))
 dbname = dbfile.split('.')[-2]
 
 # Connect to MySQL server and open SQLite copy
-cursor_sqlite = connect_sqlite(dbname)
-cursor_mysql  = connect_mysql (dbname)
+_, cursor_sqlite = connect_sqlite(dbfile)
+_, cursor_mysql  = connect_mysql (dbname)
 
 # Check tables
 tables = ['ChannelGain', 'ChannelMask', 'SipmNoisePDF']
