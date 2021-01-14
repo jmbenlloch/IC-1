@@ -37,3 +37,6 @@ jobs:
     - name: Check database
       run: |
         python invisible_cities/database/check_gain_update.py ${{ steps.files.outputs.all }}
+      env:
+        PYTHONPATH: "."
+
