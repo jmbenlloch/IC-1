@@ -36,4 +36,9 @@ jobs:
         pip install pymysql numpy
     - name: Check database
       run: |
+        pwd
+        ls *
         python invisible_cities/database/check_gain_update.py ${{ steps.files.outputs.all }}
+      env:
+        PYTHONPATH: "."
+
