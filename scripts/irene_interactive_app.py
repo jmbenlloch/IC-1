@@ -27,7 +27,7 @@ from irene_event_catalog import CatalogError, EventCatalog
 
 
 ROOT_DIR         = Path(os.environ["ICTDIR"])
-DEFAULT_DATA_DIR = Path("/analysis")
+DEFAULT_DATA_DIR = Path(os.environ.get("IRENE_DATA_DIR", "/analysis"))
 CONFIG_FILE      = ROOT_DIR / "invisible_cities" / "config" / "irene.conf"
 CATALOG_URL      = os.environ.get("IRENE_CATALOG_URL", "http://127.0.0.1:32121")
 CATALOG_TIMEOUT  = float(os.environ.get("IRENE_CATALOG_TIMEOUT_SECONDS", "5"))
