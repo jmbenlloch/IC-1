@@ -311,35 +311,29 @@ def threshold_plot(
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=t_us, y=y, mode="lines", name="summed waveform", line=dict(width=1.2)))
     fig.add_hline(y=thr, line_dash="dash")
+    shapes = []
 
     if allowed_window is not None:
         t0, t1 = allowed_window
-        fig.add_vrect(x0=float(t0), x1=float(t1), fillcolor="#a5d8ff", opacity=0.12, line_width=0)
+        shapes.append(dict(type="rect", xref="x", yref="y domain", x0=float(t0), x1=float(t1),
+                           y0=0, y1=1, fillcolor="#a5d8ff", opacity=0.12, line=dict(width=0)))
 
     if extra_regions:
         for t0, t1 in extra_regions:
-            fig.add_vrect(x0=float(t0), x1=float(t1), fillcolor="#f4a261", opacity=0.18, line_width=0)
+            shapes.append(dict(type="rect", xref="x", yref="y domain", x0=float(t0), x1=float(t1),
+                               y0=0, y1=1, fillcolor="#f4a261", opacity=0.18, line=dict(width=0)))
 
     for seg in selected:
-        fig.add_vrect(
-            x0=float(t_us[seg[0]]),
-            x1=float(t_us[seg[-1]]),
-            fillcolor=selected_color,
-            opacity=0.35,
-            line_width=1,
-            line_color=selected_color,
-        )
+        shapes.append(dict(type="rect", xref="x", yref="y domain", x0=float(t_us[seg[0]]),
+                           x1=float(t_us[seg[-1]]), y0=0, y1=1, fillcolor=selected_color,
+                           opacity=0.35, line=dict(width=1, color=selected_color)))
 
     for seg in rejected:
-        fig.add_vrect(
-            x0=float(t_us[seg[0]]),
-            x1=float(t_us[seg[-1]]),
-            fillcolor=rejected_color,
-            opacity=0.28,
-            line_width=1,
-            line_color=rejected_color,
-        )
+        shapes.append(dict(type="rect", xref="x", yref="y domain", x0=float(t_us[seg[0]]),
+                           x1=float(t_us[seg[-1]]), y0=0, y1=1, fillcolor=rejected_color,
+                           opacity=0.28, line=dict(width=1, color=rejected_color)))
 
+    fig.layout.shapes = tuple(fig.layout.shapes) + tuple(shapes)
     fig.update_layout(
         title=title,
         xaxis_title="Time (us)",
