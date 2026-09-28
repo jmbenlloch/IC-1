@@ -23,10 +23,15 @@ from invisible_cities.database          import load_db
 from invisible_cities.types.symbols     import CutAlgo
 from invisible_cities.types.symbols     import SiPMThreshold
 
+from irene_event_catalog import CatalogError, EventCatalog
+
 
 ROOT_DIR         = Path(os.environ["ICTDIR"])
 DEFAULT_DATA_DIR = Path("/analysis")
 CONFIG_FILE      = ROOT_DIR / "invisible_cities" / "config" / "irene.conf"
+CATALOG_URL      = os.environ.get("IRENE_CATALOG_URL", "http://127.0.0.1:32121")
+CATALOG_TIMEOUT  = float(os.environ.get("IRENE_CATALOG_TIMEOUT_SECONDS", "5"))
+FILE_PAGE_SIZE   = 100
 
 CFG = read_config_file(str(CONFIG_FILE)) if CONFIG_FILE.exists() else {}
 
@@ -174,30 +179,28 @@ cutting_params   = dict(  thr_sipm_type = {values.get('thr_sipm_type', 'common')
     path.write_text(template)
 
 
-def discover_run_numbers(data_root: Path):
-    runs = []
-    if not data_root.exists():
-        return runs
-
-    for path in sorted(data_root.iterdir()):
-        if not path.is_dir() or not path.name.isdigit():
-            continue
-        if any((path / "hdf5" / "data" / f"ldc{ldc}").exists() for ldc in range(1, 8)):
-            runs.append(int(path.name))
-    return runs
+@st.cache_data(ttl=10, show_spinner=False)
+def catalog_runs():
+    return EventCatalog(CATALOG_URL, DEFAULT_DATA_DIR, CATALOG_TIMEOUT).runs()
 
 
-def discover_ldc_files(data_root: Path, run_number: int, ldc: int):
-    pattern = data_root / str(run_number) / "hdf5" / "data" / f"ldc{ldc}"
-    files = []
-    for path in sorted(pattern.glob("*.h5")):
-        try:
-            with tb.open_file(path, "r") as h5in:
-                if "RD" in h5in.root and "pmtrwf" in h5in.root.RD and "sipmrwf" in h5in.root.RD:
-                    files.append(path)
-        except Exception:
-            continue
-    return files
+@st.cache_data(ttl=10, show_spinner=False)
+def catalog_ldcs(run_number: int):
+    return EventCatalog(CATALOG_URL, DEFAULT_DATA_DIR, CATALOG_TIMEOUT).ldcs(run_number)
+
+
+@st.cache_data(ttl=10, show_spinner=False)
+def catalog_files(run_number: int, ldc: int, offset: int):
+    return EventCatalog(CATALOG_URL, DEFAULT_DATA_DIR, CATALOG_TIMEOUT).files(
+        run_number, ldc, FILE_PAGE_SIZE, offset
+    )
+
+
+@st.cache_data(ttl=10, show_spinner=False)
+def catalog_file_path(file_id: int, run_number: int, ldc: int):
+    return EventCatalog(CATALOG_URL, DEFAULT_DATA_DIR, CATALOG_TIMEOUT).file_path(
+        file_id, run_number, ldc
+    )
 
 
 @st.cache_data(show_spinner=False)
@@ -673,9 +676,13 @@ def main():
     st.title("Irene Interactive Pipeline")
     st.caption("Inspect IC Irene waveforms, candidate windows, PMAPs, and SiPM response live.")
 
-    available_runs = discover_run_numbers(DEFAULT_DATA_DIR)
+    try:
+        available_runs = catalog_runs()
+    except CatalogError as exc:
+        st.error(str(exc))
+        st.stop()
     if not available_runs:
-        st.error(f"No run directories found under {DEFAULT_DATA_DIR}")
+        st.error("No indexed runs found in the NEXT event catalog.")
         st.stop()
 
     with st.sidebar:
@@ -684,20 +691,51 @@ def main():
             st.cache_data.clear()
             st.rerun()
 
-        default_run = DEFAULT_RUN_NUMBER if DEFAULT_RUN_NUMBER in available_runs else available_runs[0]
-        run_number = st.selectbox("Run number", options=available_runs, index=available_runs.index(default_run))
-        ldc_options = [ldc for ldc in range(1, 8) if (DEFAULT_DATA_DIR / str(run_number) / "hdf5" / "data" / f"ldc{ldc}").exists()]
+        run_options = sorted(available_runs, reverse=True)
+        default_run = DEFAULT_RUN_NUMBER if DEFAULT_RUN_NUMBER in run_options else run_options[0]
+        run_number = st.selectbox("Run number", options=run_options, index=run_options.index(default_run))
+        try:
+            ldc_counts = dict(catalog_ldcs(int(run_number)))
+        except CatalogError as exc:
+            st.error(str(exc))
+            st.stop()
+        ldc_options = sorted(ldc for ldc, count in ldc_counts.items() if count > 0)
         if not ldc_options:
-            st.error(f"No ldc1-7 folders found for run {run_number}")
+            st.error(f"No indexed LDC files found for run {run_number}")
             st.stop()
 
         ldc = st.selectbox("LDC", options=ldc_options, index=0)
-        ldc_files = discover_ldc_files(DEFAULT_DATA_DIR, int(run_number), int(ldc))
-        if not ldc_files:
-            st.error(f"No HDF5 waveform files found for run {run_number} in ldc{ldc}")
+        page_count = (ldc_counts[int(ldc)] + FILE_PAGE_SIZE - 1) // FILE_PAGE_SIZE
+        file_page = st.selectbox(
+            "File page (newest first)",
+            options=list(range(page_count - 1, -1, -1)),
+            format_func=lambda page: f"{page + 1} of {page_count}",
+        )
+        try:
+            page_files, _ = catalog_files(int(run_number), int(ldc), int(file_page) * FILE_PAGE_SIZE)
+        except CatalogError as exc:
+            st.error(str(exc))
+            st.stop()
+        if not page_files:
+            st.error("No indexed files on this page. Refresh the catalog selection.")
             st.stop()
 
-        file_path = st.selectbox("Waveform file", options=ldc_files, index=0)
+        file_records = {int(item["id"]): item for item in page_files}
+        file_ids = list(reversed(file_records))
+        file_id = st.selectbox(
+            "Waveform file",
+            options=file_ids,
+            format_func=lambda selected: (
+                f"counter {file_records[selected]['counter']} | "
+                f"trigger {file_records[selected]['trigger']} | "
+                f"{file_records[selected]['event_count']} events"
+            ),
+        )
+        try:
+            file_path = catalog_file_path(int(file_id), int(run_number), int(ldc))
+        except CatalogError as exc:
+            st.error(str(exc))
+            st.stop()
         n_events, n_pmts, n_samples = get_dataset_shape(file_path)
 
         detector_db = st.selectbox("Detector DB", ["next100", "flex100"], index=["next100", "flex100"].index(DEFAULT_DETECTOR_DB) if DEFAULT_DETECTOR_DB in ["next100", "flex100"] else 0)
